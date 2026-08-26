@@ -127,6 +127,18 @@ input[type=color]{width:44px;height:32px;min-height:32px;padding:2px;cursor:poin
   border:1px solid var(--line);color:var(--dim);letter-spacing:.3px}
 .loja.pt{color:var(--good);border-color:rgba(62,207,142,.4)}
 
+/* ---- locais em árvore: o encaixe visual É a hierarquia ---- */
+.loc{margin-bottom:8px}
+.locbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.loclinha{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.loclinha input[data-ln]{flex:1;min-width:150px;font-weight:600}
+.locctrl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.locctrl select,.locctrl input{min-height:32px;font-size:12.5px;padding:5px 8px;width:auto}
+.locctrl .lab{font-size:11px;color:var(--dim);letter-spacing:.2px}
+.locctrl .campo{display:flex;align-items:center;gap:5px}
+.locfilhos{margin:8px 0 0 10px;padding-left:14px;border-left:2px solid var(--line)}
+.locvazio{font-size:11.5px;color:var(--dim);padding:4px 0 0 2px}
+
 /* ---- agente ---- */
 .plan{border-left:3px solid var(--accent);padding-left:12px;margin:10px 0}
 .mv{display:flex;gap:8px;align-items:baseline;font-size:13px;padding:5px 0;border-bottom:1px solid var(--line)}
@@ -911,31 +923,89 @@ function desenhaPrecos() {
 function desenhaLocais() {
   const conta = {};
   INV.bobines.forEach(b => { if (b.local_id) conta[b.local_id] = (conta[b.local_id] || 0) + 1; });
-  $('#locais').innerHTML = INV.locais.map(l => {
+
+  /* filhos por pai. Um local cujo pai desapareceu volta a ser raiz em vez de
+     sumir da lista -- ninguém consegue arrumar o que não vê. */
+  const filhos = {};
+  for (const l of INV.locais) {
+    const pai = (l.pai_id && LOC[l.pai_id]) ? l.pai_id : 0;
+    (filhos[pai] ||= []).push(l);
+  }
+  for (const k in filhos) filhos[k].sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
+
+  const descendentes = id => {
+    const fora = new Set(), pilha = [id];
+    while (pilha.length) {
+      const x = pilha.pop();
+      for (const f of (filhos[x] || [])) if (!fora.has(f.id)) { fora.add(f.id); pilha.push(f.id); }
+    }
+    return fora;
+  };
+  /* Não se pode escolher como pai um local que já está lá dentro -- isso fechava
+     um anel. O servidor também recusa, mas nem sequer se oferece a hipótese. */
+  const opcoesPai = l => {
+    const proibidos = descendentes(l.id); proibidos.add(l.id);
+    return '<option value="">— raiz —</option>' + INV.locais
+      .filter(x => !proibidos.has(x.id))
+      .sort((a, b) => caminhoLocal(a.id).localeCompare(caminhoLocal(b.id), 'pt'))
+      .map(x => `<option value="${x.id}"${x.id === l.pai_id ? ' selected' : ''}>${esc(caminhoLocal(x.id))}</option>`)
+      .join('');
+  };
+  const TIPOS = ['sala', 'estante', 'prateleira', 'caixa', 'gaveta', 'impressora', 'outro'];
+
+  const nodo = l => {
     const n = conta[l.id] || 0, cap = l.capacidade || 0;
     const cheio = cap > 0 && n >= cap;
-    return `<div class="card" style="margin-bottom:8px">
-      <div class="row">
-        <input value="${esc(l.nome)}" data-ln="${l.id}" style="flex:1;min-width:160px">
-        <input type="number" value="${cap}" data-lc="${l.id}" style="width:96px" title="capacidade">
-        <span class="pill ${cheio ? 'bad' : (cap ? 'good' : '')}">${n}${cap ? ' / ' + cap : ''}</span>
-        <button class="ghost danger" data-lx="${l.id}">apagar</button>
+    const meus = filhos[l.id] || [];
+    /* o que está nas caixas lá dentro conta para se perceber o peso do ramo */
+    const dentro = [...descendentes(l.id)].reduce((a, id) => a + (conta[id] || 0), 0);
+    return `<div class="loc"><div class="locbox">
+      <div class="loclinha">
+        <input value="${esc(l.nome)}" data-ln="${l.id}" title="nome do local">
+        <span class="pill ${cheio ? 'bad' : (cap ? 'good' : '')}"
+              title="bobines aqui${cap ? ' / capacidade' : ''}">${n}${cap ? ' / ' + cap : ''}</span>
+        ${dentro ? `<span class="sub" title="nos locais lá dentro">+${dentro} dentro</span>` : ''}
+        <button class="ghost danger" data-lx="${l.id}" title="apagar">✕</button>
       </div>
-      <div class="sub" style="margin-top:6px">${esc(caminhoLocal(l.id))} · ${esc(l.tipo || '')}</div>
+      <div class="locctrl">
+        <span class="campo"><span class="lab">dentro de</span>
+          <select data-lp="${l.id}">${opcoesPai(l)}</select></span>
+        <span class="campo"><span class="lab">tipo</span>
+          <select data-lt="${l.id}">${TIPOS.map(t =>
+            `<option${t === (l.tipo || '') ? ' selected' : ''}>${t}</option>`).join('')}</select></span>
+        <span class="campo"><span class="lab">cabem</span>
+          <input type="number" min="0" value="${cap}" data-lc="${l.id}" style="width:74px"
+                 title="0 = capacidade desconhecida"></span>
+      </div></div>
+      ${meus.length ? `<div class="locfilhos">${meus.map(nodo).join('')}</div>` : ''}
     </div>`;
-  }).join('') || '<div class="empty">Sem locais.</div>';
-  const guarda = async el => {
-    const id = el.dataset.ln || el.dataset.lc;
-    const corpo = el.dataset.ln ? {nome: el.value} : {capacidade: +el.value || 0};
-    try { await api('/api/locais/' + id, {method: 'PATCH', body: JSON.stringify(corpo)}); await carrega(); }
-    catch (e) { toast(e.message); }
   };
-  $$('#locais [data-ln],#locais [data-lc]').forEach(i => i.onchange = () => guarda(i));
+
+  $('#locais').innerHTML = (filhos[0] || []).map(nodo).join('')
+    || '<div class="empty">Sem locais. Cria o primeiro aqui em cima.</div>';
+
+  const guarda = async (el, corpo) => {
+    try {
+      await api('/api/locais/' + (el.dataset.ln || el.dataset.lc || el.dataset.lp || el.dataset.lt),
+                {method: 'PATCH', body: JSON.stringify(corpo)});
+      await carrega();
+    } catch (e) { toast(e.message, 4000); await carrega(); }
+  };
+  $$('#locais [data-ln]').forEach(i => i.onchange = () => guarda(i, {nome: i.value}));
+  $$('#locais [data-lc]').forEach(i => i.onchange = () => guarda(i, {capacidade: +i.value || 0}));
+  $$('#locais [data-lt]').forEach(i => i.onchange = () => guarda(i, {tipo: i.value}));
+  $$('#locais [data-lp]').forEach(i => i.onchange = () => guarda(i, {pai_id: i.value ? +i.value : null}));
   $$('#locais [data-lx]').forEach(b => b.onclick = async () => {
-    if (!confirm('Apagar este local? As bobines que lá estão ficam sem local.')) return;
-    await api('/api/locais/' + b.dataset.lx, {method: 'DELETE'}); await carrega(); toast('local apagado');
+    const l = LOC[+b.dataset.lx], meus = (filhos[l.id] || []).length;
+    if (!confirm(`Apagar "${l.nome}"?\n\nAs bobines que lá estão ficam sem local`
+      + (meus ? ` e os ${meus} locais lá dentro passam a raiz.` : '.'))) return;
+    await api('/api/locais/' + b.dataset.lx, {method: 'DELETE'});
+    await carrega(); toast('local apagado');
   });
-  const sel = ll => INV.locais.map(l => `<option value="${l.id}">${esc(caminhoLocal(l.id))}</option>`).join('');
+
+  const sel = () => INV.locais.slice()
+    .sort((a, b) => caminhoLocal(a.id).localeCompare(caminhoLocal(b.id), 'pt'))
+    .map(l => `<option value="${l.id}">${esc(caminhoLocal(l.id))}</option>`).join('');
   $('#lPai').innerHTML = '<option value="">(raiz)</option>' + sel();
   $('#mLocal').innerHTML = '<option value="">(sem local)</option>' + sel();
 }

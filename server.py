@@ -30,7 +30,7 @@ import lexicon
 import lojas
 
 ROOT = Path(__file__).resolve().parent
-VERSAO = "1.1.0"
+VERSAO = "1.2.0"
 SESSION_COOKIE = "bobina_session"
 SESSION_DIAS = int(os.environ.get("BOBINA_SESSION_DAYS", "30"))
 MAX_BODY = int(os.environ.get("BOBINA_MAX_BODY", "2097152"))
@@ -247,6 +247,29 @@ def user_da_sessao(token: str | None) -> dict | None:
     if not s:
         return None
     return linha("SELECT id,email,criado_em FROM users WHERE id=?", (s["user_id"],))
+
+
+def valida_pai(uid: int, lid: int, pai_id: int | None) -> str:
+    """Impede que um local fique dentro de si próprio ou de um descendente seu.
+
+    Sem esta trava, pôr a "Oficina" dentro da "Estante A" -- que já está na
+    Oficina -- fechava um anel: `caminhoLocal()` passava a subir para sempre à
+    procura de uma raiz que já não existia. Devolve "" quando está tudo bem."""
+    if pai_id is None:
+        return ""
+    if pai_id == lid:
+        return "um local não pode estar dentro de si próprio"
+    if not linha("SELECT 1 FROM locais WHERE id=? AND user_id=?", (pai_id, uid)):
+        return "esse local não existe"
+    visto: set[int] = set()
+    actual: int | None = pai_id
+    while actual is not None and actual not in visto:
+        visto.add(actual)
+        if actual == lid:
+            return "isso punha o local dentro de um que já está dentro dele"
+        r = linha("SELECT pai_id FROM locais WHERE id=? AND user_id=?", (actual,uid))
+        actual = r["pai_id"] if r else None
+    return ""
 
 
 def semear(uid: int) -> None:
@@ -750,6 +773,9 @@ class Handler(SimpleHTTPRequestHandler):
             campos = {k: corpo.get(k) for k in CAMPOS_LOCAL if k in corpo}
             if not (campos.get("nome") or "").strip():
                 return self.erro("o local precisa de nome")
+            if campos.get("pai_id") and not linha(
+                    "SELECT 1 FROM locais WHERE id=? AND user_id=?", (campos["pai_id"], uid)):
+                return self.erro("esse local não existe")
             cols = ["user_id", "criado_em"] + list(campos)
             vals = [uid, t] + [campos[k] for k in campos]
             nid = executa(f"INSERT INTO locais({','.join(cols)})"
@@ -764,6 +790,13 @@ class Handler(SimpleHTTPRequestHandler):
                 executa("DELETE FROM locais WHERE id=? AND user_id=?", (lid, uid))
                 return self.json({"ok": True})
             campos = {k: corpo[k] for k in CAMPOS_LOCAL if k in corpo}
+            if "pai_id" in campos:
+                bruto = campos["pai_id"]
+                pai = int(bruto) if str(bruto or "").strip() not in ("", "0", "None") else None
+                problema = valida_pai(uid, lid, pai)
+                if problema:
+                    return self.erro(problema)
+                campos["pai_id"] = pai
             if campos:
                 executa(f"UPDATE locais SET {','.join(f'{k}=?' for k in campos)}"
                         " WHERE id=? AND user_id=?", (*campos.values(), lid, uid))

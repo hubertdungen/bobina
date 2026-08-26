@@ -38,7 +38,11 @@ cores compostas misturam-se. Dá para escolher à mão por amostra ou por roda R
 e voltar ao automático quando se quiser.
 
 **Arrumação.** Locais em árvore (sala › armário › prateleira › caixa) com
-capacidade. O agente (`agente.py`) propõe nomes e onde pôr cada bobine; o
+capacidade, e a lista desenha essa árvore: o que está dentro de outro aparece
+encaixado lá dentro. Nome, tipo, capacidade e "dentro de" mudam-se a qualquer
+momento; o campo "dentro de" nunca oferece o próprio local nem um que já esteja
+lá dentro, e o servidor recusa na mesma — um anel de locais fazia o caminho até
+à raiz nunca terminar. O agente (`agente.py`) propõe nomes e onde pôr cada bobine; o
 **Preview** não escreve nada, o **Apply** aplica e guarda a reversão para se
 poder **anular**. Claude, GPT, Gemini ou DeepSeek, à escolha em Definições.
 
