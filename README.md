@@ -15,8 +15,27 @@ Black*; `grey` encontra *Cinzento*; `azu` já chega para a AzureFilm aparecer.
 "Azure" é de propósito marca **e** cor — casa com as duas.
 
 **Preços.** Cinco lojas (`lojas.py`): Evolt e Core XY (PT), QIDI EU, Elegoo EU e
-Amazon. Cada uma recebe a pesquisa na sua língua — mandar "preto" a uma loja
-inglesa devolvia zero. Actualiza sozinho de 24 em 24 horas e guarda o histórico.
+Amazon. Cada loja recebe o texto tal como foi escrito **mais** as versões em
+português e em inglês — a língua soma-se, nunca substitui, para nenhuma loja
+ficar de fora só por catalogar na outra. Actualiza sozinho de 24 em 24 horas e
+guarda o histórico.
+
+A Evolt leva tratamento à parte: a pesquisa da WooCommerce casa uma *substring*
+contígua do título, por isso `asa black` devolve zero enquanto `asa 1kg black`
+devolve sete — o "1kg" fica pelo meio. Pesquisa-se pelo termo mais selectivo,
+pagina-se e o filtro fino é feito cá com o léxico.
+
+**Fotos.** A foto da loja é guardada em `~/.local/share/bobina/imagens` e servida
+por `/api/imagem` — o endereço da loja sozinho não chegava, parte no dia em que
+ela mexer nos ficheiros. Usa-se a miniatura que a própria loja serve (7–20 KB em
+vez de 300 KB) e só se vai buscar imagens aos domínios das cinco lojas.
+
+**Cores.** Sem foto — ou por preferência — a bobine é **desenhada** em traço e
+pintada pelo que está escrito na cor: `dark grey`, `wood ash`, `silk red`,
+`purple-blue`, `Pastel Mint Green`, `negro azabache`. São ~290 nomes de cor de
+impressão 3D com modificadores (`dark`, `pastel`, `neon`, `matte`, `silk`), e as
+cores compostas misturam-se. Dá para escolher à mão por amostra ou por roda RGB,
+e voltar ao automático quando se quiser.
 
 **Arrumação.** Locais em árvore (sala › armário › prateleira › caixa) com
 capacidade. O agente (`agente.py`) propõe nomes e onde pôr cada bobine; o

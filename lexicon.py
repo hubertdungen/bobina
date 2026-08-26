@@ -83,11 +83,12 @@ MARCAS: dict[str, list[str]] = {
     "spectrum": ["spectrum", "spectrum filaments", "spectrumfilaments", "smart abs"],
     "elegoo": ["elegoo", "elegoo rapid"],
     "qidi": ["qidi", "qidi tech", "qidi3d", "qidi technology"],
+    # "hyper" sozinho saiu: há "PETG Hyper Speed" de meia dúzia de marcas
     "creality": ["creality", "creality hyper", "ender filament", "cr pla"],
     "anycubic": ["anycubic"],
     "extrudr": ["extrudr", "greentec", "greentec pro", "xpetg", "durapro"],
     "fillamentum": ["fillamentum", "extrafill", "timberfill", "vinyl"],
-    "3djake": ["3djake", "3d jake", "jake", "ecopla", "nicefilaments"],
+    "3djake": ["3djake", "3d jake", "jake", "nicefilaments"],
     "eryone": ["eryone"],
     "overture": ["overture"],
     "devildesign": ["devil", "devil design", "devildesign"],
@@ -96,7 +97,9 @@ MARCAS: dict[str, list[str]] = {
     "colorfabb": ["colorfabb", "ngen", "woodfill", "corkfill", "bronzefill"],
     "formfutura": ["formfutura", "easyfil", "hdglass", "titanx", "atlas", "python flex"],
     "filamentpm": ["filament pm", "filamentpm", "plastspol"],
-    "rosa3d": ["rosa", "rosa3d", "rosa 3d", "refill"],
+    # "refill" saiu daqui: é palavra genérica de catálogo (bobine sem carretel),
+    # e estava a fazer passar por Rosa3D todos os "PLA Silk (Refill) ... Azurefilm"
+    "rosa3d": ["rosa", "rosa3d", "rosa 3d"],
     "printme": ["print me", "printme", "ecoline", "swift pet"],
     "nobufil": ["nobufil"],
     "addnorth": ["addnorth", "add north", "add:north", "x pla", "textura", "adamant"],
@@ -126,7 +129,7 @@ MARCAS: dict[str, list[str]] = {
     "winkle": ["winkle"],
     "herz": ["herz", "herz filament"],
     "noctuo": ["noctuo"],
-    "realfilament": ["real filament", "realfilament", "real"],
+    "realfilament": ["real filament", "realfilament"],
     "francofil": ["francofil"],
     "filaticum": ["filaticum"],
     "gembird": ["gembird"],
@@ -199,6 +202,149 @@ ESTADOS: dict[str, list[str]] = {
     "arquivado": ["arquivado", "archived", "guardado", "fora de uso"],
 }
 
+
+# ---------------------------------------------------------------- cores em hex --
+# Para desenhar a bobine com a cor certa quando não há foto da loja. As chaves são
+# nomes como aparecem mesmo nos catálogos de filamento (a maioria em inglês, que é
+# como as lojas escrevem, mais os equivalentes portugueses). Os compostos ("wood
+# ash", "ocean blue") vêm aqui inteiros porque valem mais do que a média das
+# partes; o resto resolve-se por mistura e por modificadores.
+CORES_HEX: dict[str, str] = {
+    # neutros
+    "preto": "#141414", "black": "#141414", "negro": "#141414",
+    "jet black": "#0d0d0d", "deep black": "#101010", "traffic black": "#1a1a1a",
+    "galaxy black": "#17161c", "carbon black": "#1c1c1e", "obsidian": "#14161a",
+    "onyx": "#151517", "midnight": "#12172a", "charcoal": "#36393d",
+    "branco": "#f4f5f7", "white": "#f4f5f7", "cotton white": "#f7f6f2",
+    "pure white": "#fbfbfb", "natural white": "#f2efe6", "traffic white": "#f1f2f4",
+    "polar white": "#f6f8fa", "snow": "#fafcfd", "neve": "#fafcfd",
+    "cinzento": "#7b828c", "grey": "#7b828c", "gray": "#7b828c", "cinza": "#7b828c",
+    "light grey": "#b6bcc4", "dark grey": "#4a4f57", "ash grey": "#9aa0a6",
+    "anthracite": "#3a3f45", "antracite": "#3a3f45", "graphite": "#43474d",
+    "grafite": "#43474d", "slate": "#5b6672", "nardo grey": "#6f7377",
+    "gunmetal": "#4b5158", "steel": "#8a9198", "aco": "#8a9198",
+    "concrete": "#9b9a95", "cimento": "#9b9a95", "titanium": "#8e9195",
+    # metálicos
+    "prateado": "#c9ccd1", "silver": "#c9ccd1", "prata": "#c9ccd1",
+    "chrome": "#d7dbe0", "aluminium": "#c2c7cc", "platinum": "#d5d7d8",
+    "dourado": "#d4af37", "gold": "#d4af37", "ouro": "#d4af37",
+    "champagne": "#e3d5a8", "brass": "#b5952f", "latao": "#b5952f",
+    "bronze": "#8c6239", "copper": "#b45f2b", "cobre": "#b45f2b",
+    "rose gold": "#d9a08a", "ouro rosa": "#d9a08a",
+    # azuis
+    "azul": "#2563eb", "blue": "#2563eb",
+    "light blue": "#7cb6f2", "dark blue": "#16357a", "azul escuro": "#16357a",
+    "navy": "#12224f", "azul marinho": "#12224f", "marine": "#123a63",
+    "cobalt": "#1b4bb5", "cobalto": "#1b4bb5", "royal blue": "#2b4bc7",
+    "sky blue": "#87c5ec", "sky": "#87c5ec", "celeste": "#9fd3f0",
+    "ocean blue": "#12628f", "azure": "#4c9fe0", "azzurro": "#4c9fe0",
+    "ultramarine": "#2a3fa8", "sapphire": "#183a8c", "safira": "#183a8c",
+    "denim": "#4a6fa0", "petrol": "#11525c", "petroleo": "#11525c",
+    "indigo": "#3b3a8f", "ice blue": "#cfe4ef", "gelo": "#cfe4ef",
+    "pastel blue": "#a8c8ea", "arctic blue": "#b9d9e6",
+    # turquesas / verdes-água
+    "turquesa": "#14b8a6", "turquoise": "#14b8a6", "teal": "#0f8f86",
+    "cyan": "#22c3d6", "ciano": "#22c3d6", "aqua": "#4fd1c5",
+    "aquamarine": "#6fd6c0", "agua marinha": "#6fd6c0", "peacock": "#0d7a83",
+    "mint": "#8fdcb5", "menta": "#8fdcb5", "pastel mint": "#b6e7cd",
+    "verde agua": "#69c6b0",
+    # verdes
+    "verde": "#16a34a", "green": "#16a34a",
+    "light green": "#7fd08a", "dark green": "#0d5c2c", "verde escuro": "#0d5c2c",
+    "olive": "#6b7a2f", "oliva": "#6b7a2f", "lime": "#9fd525", "lima": "#9fd525",
+    "forest": "#14532d", "floresta": "#14532d", "emerald": "#0f9d63",
+    "esmeralda": "#0f9d63", "sage": "#9aab8a", "salvia": "#9aab8a",
+    "pistachio": "#b3cf87", "pistacho": "#b3cf87", "army green": "#4b5320",
+    "military": "#4b5320", "militar": "#4b5320", "apple green": "#7ac142",
+    "grass": "#3f9b35", "relva": "#3f9b35", "traffic green": "#1a7a3c",
+    "neon green": "#4dff4d", "verde neon": "#4dff4d", "pastel green": "#bfe6bf",
+    # amarelos / laranjas
+    "amarelo": "#eab308", "yellow": "#eab308",
+    "lemon": "#f2e14c", "limao": "#f2e14c", "mustard": "#c9971f",
+    "mostarda": "#c9971f", "sunflower": "#f4c025", "girassol": "#f4c025",
+    "banana": "#f0dd85", "canary": "#f7e04a", "traffic yellow": "#f3c000",
+    "neon yellow": "#eaff2b", "pastel yellow": "#f6ecab",
+    "laranja": "#f97316", "orange": "#f97316", "tangerine": "#f2812f",
+    "tangerina": "#f2812f", "amber": "#e8a33d", "ambar": "#e8a33d",
+    "apricot": "#f2b183", "alperce": "#f2b183", "peach": "#f7b9a0",
+    "pessego": "#f7b9a0", "pumpkin": "#e4762a", "abobora": "#e4762a",
+    "traffic orange": "#e2610f", "neon orange": "#ff6a13", "rust": "#9c4a1a",
+    "ferrugem": "#9c4a1a",
+    # vermelhos / rosas
+    "vermelho": "#dc2626", "red": "#dc2626",
+    "dark red": "#7f1414", "vermelho escuro": "#7f1414", "crimson": "#b81c37",
+    "carmim": "#b81c37", "scarlet": "#e02a1c", "escarlate": "#e02a1c",
+    "ruby": "#9b1b33", "rubi": "#9b1b33", "cherry": "#b3202f", "cereja": "#b3202f",
+    "blood red": "#7a1015", "traffic red": "#c8102e", "fire engine red": "#d21f28",
+    "wine": "#6d1a2e", "vinho": "#6d1a2e", "burgundy": "#5c1a2b",
+    "bordeaux": "#5c1a2b", "bordo": "#5c1a2b", "brick": "#9c4a3c",
+    "tijolo": "#9c4a3c", "coral": "#f27059", "salmon": "#f2947a",
+    "salmao": "#f2947a", "terracotta": "#b5573a", "terracota": "#b5573a",
+    "rosa": "#ec4899", "pink": "#ec4899", "hot pink": "#f7318f",
+    "rosa choque": "#f7318f", "fuchsia": "#d926a9", "fucsia": "#d926a9",
+    "magenta": "#c026a3", "pastel pink": "#f7c2d5", "rosa pastel": "#f7c2d5",
+    "blush": "#eebcbc", "bubblegum": "#f79fc4", "flamingo": "#f18aa0",
+    # roxos
+    "roxo": "#8b5cf6", "purple": "#8b5cf6", "violet": "#8757e0",
+    "violeta": "#8757e0", "lilac": "#c3a8ea", "lilas": "#c3a8ea",
+    "lavender": "#c4b5e8", "lavanda": "#c4b5e8", "plum": "#6b2f5e",
+    "ameixa": "#6b2f5e", "grape": "#5b2a8a", "uva": "#5b2a8a",
+    "aubergine": "#4a2340", "beringela": "#4a2340", "mauve": "#a67fa6",
+    "amethyst": "#8b62c4", "ametista": "#8b62c4",
+    # castanhos / madeiras / areias
+    "castanho": "#6b4423", "brown": "#6b4423", "marrom": "#6b4423",
+    "chocolate": "#4b2f21", "coffee": "#4a3427", "cafe": "#4a3427",
+    "caramel": "#a9722e", "caramelo": "#a9722e", "tan": "#c2996b",
+    "mahogany": "#5b2f26", "mogno": "#5b2f26", "leather": "#8a5a35",
+    "cabedal": "#8a5a35", "walnut": "#5d4033", "nogueira": "#5d4033",
+    "oak": "#b08b56", "carvalho": "#b08b56", "cork": "#c19a6b",
+    "cortica": "#c19a6b", "bamboo": "#c9a86a", "bambu": "#c9a86a",
+    # os "wood" que o Hubert citou: são uma família por si, e clarinhos
+    "wood": "#b1885a", "madeira": "#b1885a",
+    "wood light": "#cdab7d", "light wood": "#cdab7d", "madeira clara": "#cdab7d",
+    "wood dark": "#7a5636", "dark wood": "#7a5636", "madeira escura": "#7a5636",
+    "wood ash": "#c4b39a", "ash wood": "#c4b39a", "ash": "#c4b39a",
+    "birch": "#dcc39b", "pine": "#c9a978", "ebony wood": "#3b2f2a",
+    # bege / areia / marfim
+    "bege": "#d9c9a8", "beige": "#d9c9a8",
+    "sand": "#dcc9a0", "areia": "#dcc9a0", "desert sand": "#e0c9a6",
+    "cream": "#f0e6d2", "creme": "#f0e6d2", "ivory": "#f2ecdc",
+    "marfim": "#f2ecdc", "vanilla": "#f2e8c9", "baunilha": "#f2e8c9",
+    "almond": "#e6d2b5", "amendoa": "#e6d2b5", "linen": "#e8e0d0",
+    "linho": "#e8e0d0", "wheat": "#e2cd9a", "trigo": "#e2cd9a",
+    "khaki": "#b0a06a", "caqui": "#b0a06a", "nude": "#e0c2ab",
+    "bone": "#e5e0d4", "osso": "#e5e0d4", "stone": "#b8b0a4",
+    "pedra": "#b8b0a4", "clay": "#b07d63", "barro": "#b07d63",
+    # especiais
+    "transparente": "#dfe7ee", "transparent": "#dfe7ee", "clear": "#dfe7ee",
+    "natural": "#e8e4da", "cristal": "#e2edf3", "crystal": "#e2edf3",
+    "glass": "#dce9ef", "vidro": "#dce9ef",
+    "glow": "#c7f5b8", "fosforescente": "#c7f5b8", "glow in the dark": "#c7f5b8",
+    "rainbow": "#8b5cf6", "arco iris": "#8b5cf6", "multicolor": "#8b5cf6",
+    "galaxy": "#2a2350", "galaxia": "#2a2350", "marble": "#dcd8d2",
+    "marmore": "#dcd8d2", "pearl": "#eae6e0", "perola": "#eae6e0",
+    "granite": "#8d8b88", "granito": "#8d8b88",
+}
+
+# Palavras que não são cor mas mexem com ela. O valor é o que fazem: escurecer,
+# clarear, dessaturar, saturar. Aplicam-se depois de a cor base estar escolhida.
+MODIF_COR: dict[str, str] = {
+    "dark": "escurecer", "escuro": "escurecer", "escura": "escurecer",
+    "deep": "escurecer", "night": "escurecer", "midnight": "escurecer",
+    "light": "clarear", "claro": "clarear", "clara": "clarear",
+    "pale": "clarear", "palido": "clarear", "soft": "clarear",
+    "pastel": "pastel", "baby": "pastel", "bebe": "pastel", "powder": "pastel",
+    "suave": "pastel", "leve": "clarear",
+    "neon": "saturar", "fluo": "saturar", "fluor": "saturar",
+    "fluorescent": "saturar", "bright": "saturar", "vivid": "saturar",
+    "intense": "saturar", "vibrant": "saturar",
+    "matte": "dessaturar", "mate": "dessaturar", "fosco": "dessaturar",
+    "silk": "brilho", "seda": "brilho", "silky": "brilho", "shine": "brilho",
+    "satin": "brilho", "acetinado": "brilho", "metallic": "brilho",
+    "metalico": "brilho", "pearl": "brilho", "sparkle": "brilho",
+    "glitter": "brilho", "twinkling": "brilho",
+}
+
 GRUPOS: dict[str, dict[str, list[str]]] = {
     "cor": CORES,
     "marca": MARCAS,
@@ -257,6 +403,8 @@ def payload() -> dict:
         "grupos": {g: {c: [norm(a) for a in [c, *al]] for c, al in t.items()}
                    for g, t in GRUPOS.items()},
         "index": build_index(),
+        "hex": {norm(k): v for k, v in CORES_HEX.items()},
+        "modif": {norm(k): v for k, v in MODIF_COR.items()},
     }
 
 

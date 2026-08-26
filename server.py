@@ -19,6 +19,7 @@ import sqlite3
 import threading
 import time
 import urllib.parse
+import urllib.request
 from http import cookies
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -29,7 +30,7 @@ import lexicon
 import lojas
 
 ROOT = Path(__file__).resolve().parent
-VERSAO = "1.0.0"
+VERSAO = "1.1.0"
 SESSION_COOKIE = "bobina_session"
 SESSION_DIAS = int(os.environ.get("BOBINA_SESSION_DAYS", "30"))
 MAX_BODY = int(os.environ.get("BOBINA_MAX_BODY", "2097152"))
@@ -112,6 +113,9 @@ CREATE TABLE IF NOT EXISTS filamentos (
   loja TEXT DEFAULT '',
   etiquetas TEXT DEFAULT '',
   notas TEXT DEFAULT '',
+  -- 0 = automático (foto da loja se houver, senão a bobine desenhada);
+  -- 1 = desenhar sempre a bobine, mesmo tendo foto
+  icone INTEGER DEFAULT 0,
   seguir INTEGER DEFAULT 1,
   seguir_query TEXT DEFAULT '',
   criado_em INTEGER NOT NULL,
@@ -178,6 +182,9 @@ def abre_db(data_dir: Path) -> sqlite3.Connection:
     colunas = {r[1] for r in con.execute("PRAGMA table_info(locais)")}
     if "capacidade" not in colunas:
         con.execute("ALTER TABLE locais ADD COLUMN capacidade INTEGER DEFAULT 0")
+    cols_fil = {r[1] for r in con.execute("PRAGMA table_info(filamentos)")}
+    if "icone" not in cols_fil:
+        con.execute("ALTER TABLE filamentos ADD COLUMN icone INTEGER DEFAULT 0")
     con.commit()
     DB = con
     return con
@@ -251,6 +258,63 @@ def semear(uid: int) -> None:
             ("Junto à impressora", "impressora")]):
         executa("INSERT INTO locais(user_id,nome,pai_id,tipo,ordem,criado_em)"
                 " VALUES(?,?,?,?,?,?)", (uid, nome, None, tipo, i, t))
+
+
+# ------------------------------------------------------ cache das imagens --
+
+# As fotos ficam guardadas em disco e servidas por nós. Só o endereço da loja não
+# chegava: no dia em que a Evolt mexer nos ficheiros, os cartões ficam com o
+# quadrado partido. Assim a foto é nossa a partir do momento em que se adiciona.
+IMG_MAX = 4 * 1024 * 1024
+IMG_TIPOS = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
+             "image/gif": ".gif", "image/avif": ".avif"}
+# Só se vai buscar imagens às lojas que a app conhece -- sem isto, /api/imagem
+# era um proxy aberto para qualquer endereço que alguém quisesse pôr no campo.
+IMG_HOSTS = (
+    "evolt.pt", "corexy.pt", "qidi3d.com", "elegoo.com",
+    "cdn.shopify.com", "shopify.com",
+    "media-amazon.com", "ssl-images-amazon.com", "images-amazon.com",
+)
+
+
+def img_dir() -> Path:
+    d = DATA_DIR / "imagens"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def img_permitida(url: str) -> bool:
+    try:
+        u = urllib.parse.urlparse(url)
+    except Exception:  # noqa: BLE001
+        return False
+    if u.scheme not in ("http", "https") or not u.hostname:
+        return False
+    h = u.hostname.lower()
+    return any(h == d or h.endswith("." + d) for d in IMG_HOSTS)
+
+
+def img_local(url: str) -> Path | None:
+    """Devolve o ficheiro em cache, indo buscá-lo à loja da primeira vez."""
+    if not img_permitida(url):
+        return None
+    nome = hashlib.sha256(url.encode()).hexdigest()[:32]
+    for f in img_dir().glob(nome + ".*"):
+        return f
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": lojas.UA})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            tipo = (r.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            if tipo not in IMG_TIPOS:
+                return None
+            dados = r.read(IMG_MAX + 1)
+    except Exception:  # noqa: BLE001
+        return None
+    if not dados or len(dados) > IMG_MAX:
+        return None
+    destino = img_dir() / (nome + IMG_TIPOS[tipo])
+    destino.write_bytes(dados)
+    return destino
 
 
 # ------------------------------------------------- ponte para o Fatia (token) --
@@ -414,7 +478,7 @@ def ciclo_tracker() -> None:
 
 CAMPOS_FILAMENTO = ["marca", "material", "cor", "cor_hex", "diametro", "peso_g",
                     "densidade", "temp_bico", "temp_mesa", "ref", "url", "imagem",
-                    "loja", "etiquetas", "notas", "seguir", "seguir_query"]
+                    "loja", "etiquetas", "notas", "icone", "seguir", "seguir_query"]
 CAMPOS_BOBINE = ["filamento_id", "etiqueta", "local_id", "peso_liquido_g", "restante_g",
                  "tara_g", "estado", "preco", "moeda", "comprado_em", "comprado_loja",
                  "comprado_url", "aberto_em", "notas"]
@@ -525,6 +589,21 @@ class Handler(SimpleHTTPRequestHandler):
             return
         uid = us["id"]
 
+        if caminho == "/api/imagem":
+            alvo = (q.get("u") or [""])[0]
+            f = img_local(alvo)
+            if not f:
+                return self.erro("imagem indisponível", 404)
+            tipo = mimetypes.guess_type(f.name)[0] or "application/octet-stream"
+            corpo = f.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", tipo)
+            self.send_header("Content-Length", str(len(corpo)))
+            self.send_header("Cache-Control", "public, max-age=2592000, immutable")
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(corpo)
+            return
         if caminho == "/api/inventario":
             return self.json(self._inventario(uid))
         if caminho == "/api/precos":
@@ -792,6 +871,12 @@ class Handler(SimpleHTTPRequestHandler):
                 vals = [uid, t, t] + [campos[k] for k in campos]
                 fid = executa(f"INSERT INTO filamentos({','.join(cols)})"
                               f" VALUES({','.join('?' * len(cols))})", tuple(vals))
+        # puxar a foto já, enquanto se sabe que o endereço é bom
+        if (f.get("imagem") or "").strip():
+            try:
+                img_local(f["imagem"])
+            except Exception:  # noqa: BLE001 - foto é um extra, não trava nada
+                pass
         quantas = max(1, min(int(corpo.get("quantidade") or 1), 50))
         b = corpo.get("bobine") or {}
         peso = float(b.get("peso_liquido_g") or f.get("peso_g") or 1000)

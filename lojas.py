@@ -47,6 +47,19 @@ CACHE_TTL = int(os.environ.get("BOBINA_LOJAS_TTL", "600"))
 _cache: dict[tuple, tuple[float, list]] = {}
 _cache_lock = threading.Lock()
 
+# Um cadeado por chave. Sem isto, as variantes de língua da mesma pesquisa
+# partem todas ao mesmo tempo, falham a cache todas (ainda ninguém a encheu) e
+# vão buscar o mesmo à loja três vezes -- foi o que atirou a Amazon a timeout.
+_locks: dict[tuple, threading.Lock] = {}
+_locks_guard = threading.Lock()
+
+
+def _lock_da_chave(chave: tuple) -> threading.Lock:
+    with _locks_guard:
+        if len(_locks) > 400:
+            _locks.clear()
+        return _locks.setdefault(chave, threading.Lock())
+
 
 def _cached(loja: str, termo: str, fn, limite: int) -> list[dict]:
     """Memória curta por (loja, termo). O ecrã de adicionar pesquisa enquanto se
@@ -56,7 +69,12 @@ def _cached(loja: str, termo: str, fn, limite: int) -> list[dict]:
         hit = _cache.get(chave)
         if hit and time.time() - hit[0] < CACHE_TTL:
             return hit[1]
-    r = fn(termo, limite)
+    with _lock_da_chave(chave):
+        with _cache_lock:                      # outro pode tê-la enchido entretanto
+            hit = _cache.get(chave)
+            if hit and time.time() - hit[0] < CACHE_TTL:
+                return hit[1]
+        r = fn(termo, limite)
     with _cache_lock:
         _cache[chave] = (time.time(), r)
         if len(_cache) > 500:                       # não cresce sem fim
@@ -136,6 +154,27 @@ def peso_g(titulo: str) -> float | None:
     return None
 
 
+def _mini(srcset: str, minimo: int = 200) -> str:
+    """A variante mais pequena do srcset que ainda sirva.
+
+    Os cartões mostram a foto a 44 px, mas as lojas servem o original: a foto de
+    um filamento na Evolt chega a ter 290 KB. Com trinta filamentos era quase um
+    megabyte a cada abertura, para nada. O srcset do WordPress traz 150w, 300w,
+    500w e 1000w -- fica-se pela de 300."""
+    melhor, melhor_w = "", 10 ** 9
+    for parte in (srcset or "").split(","):
+        campos = parte.strip().split()
+        if len(campos) != 2 or not campos[1].endswith("w"):
+            continue
+        try:
+            w = int(campos[1][:-1])
+        except ValueError:
+            continue
+        if minimo <= w < melhor_w:
+            melhor, melhor_w = campos[0], w
+    return melhor
+
+
 def _produto(loja: str, *, titulo: str, preco: float | None, url: str,
              imagem: str = "", stock=None, moeda: str = "EUR",
              marca: str = "", ref: str = "") -> dict:
@@ -160,25 +199,120 @@ def _produto(loja: str, *, titulo: str, preco: float | None, url: str,
 
 # ----------------------------------------------------------------- Evolt (PT) --
 
+EVOLT_API = "https://evolt.pt/wp-json/wc/store/v1/products"
+EVOLT_PAGINAS = int(os.environ.get("BOBINA_EVOLT_PAGINAS", "3"))
+
+
+_evolt_paginas: dict[tuple, tuple[float, list]] = {}
+
+
+def _evolt_pagina(q: str, page: int = 1, n: int = 100) -> list[dict]:
+    """Cache à parte das páginas cruas.
+
+    A busca() manda à Evolt duas variantes da mesma pesquisa (a traduzida e a
+    escrita tal e qual) e ambas acabam a paginar pelo MESMO termo largo -- sem
+    isto eram seis pedidos de 100 produtos em vez de três."""
+    chave = ("evolt-pag", q, page, n)
+    with _cache_lock:
+        hit = _evolt_paginas.get(chave)
+        if hit and time.time() - hit[0] < CACHE_TTL:
+            return hit[1]
+    with _lock_da_chave(chave):
+        with _cache_lock:
+            hit = _evolt_paginas.get(chave)
+            if hit and time.time() - hit[0] < CACHE_TTL:
+                return hit[1]
+        # _fields corta a página de 2 MB para 600 KB e o tempo quase a metade;
+        # o resto do payload da Woo (descrições, variações, atributos) não se usa
+        url = EVOLT_API + "?" + urllib.parse.urlencode(
+            {"search": q, "per_page": n, "page": page, "status": "publish",
+             "_fields": "id,name,prices,permalink,images,sku,is_in_stock"})
+        try:
+            r = _json(url) or []
+        except Exception:  # noqa: BLE001 - página a mais devolve erro, não é falha
+            r = []
+    with _cache_lock:
+        _evolt_paginas[chave] = (time.time(), r)
+        if len(_evolt_paginas) > 120:
+            for k in sorted(_evolt_paginas, key=lambda k: _evolt_paginas[k][0])[:60]:
+                _evolt_paginas.pop(k, None)
+    return r
+
+
+def _evolt_produto(p: dict) -> dict:
+    precos = p.get("prices") or {}
+    # a Woo devolve inteiros na unidade mínima: 590 com minor_unit 2 = 5,90 €
+    minor = int(precos.get("currency_minor_unit", 2) or 2)
+    bruto = precos.get("price")
+    preco = (int(bruto) / (10 ** minor)) if bruto not in (None, "") else None
+    bruta = (p.get("images") or [{}])[0] or {}
+    img = _mini(bruta.get("srcset", "")) or bruta.get("thumbnail") or bruta.get("src", "")
+    return _produto(
+        "evolt", titulo=_txt(p.get("name")), preco=preco, url=p.get("permalink", ""),
+        imagem=img, stock=p.get("is_in_stock"),
+        moeda=precos.get("currency_code", "EUR"), ref=str(p.get("sku") or ""))
+
+
 def busca_evolt(q: str, limite: int = 12) -> list[dict]:
-    url = ("https://evolt.pt/wp-json/wc/store/v1/products?"
-           + urllib.parse.urlencode({"search": q, "per_page": limite, "status": "publish"}))
-    out = []
-    for p in _json(url) or []:
-        precos = p.get("prices") or {}
-        # a Woo devolve inteiros na unidade mínima: 590 com minor_unit 2 = 5,90 €
-        minor = int(precos.get("currency_minor_unit", 2) or 2)
-        bruto = precos.get("price")
-        preco = (int(bruto) / (10 ** minor)) if bruto not in (None, "") else None
-        img = ((p.get("images") or [{}])[0] or {}).get("src", "")
-        out.append(_produto(
-            "evolt", titulo=_txt(p.get("name")), preco=preco, url=p.get("permalink", ""),
-            imagem=img, stock=p.get("is_in_stock"),
-            moeda=precos.get("currency_code", "EUR"), ref=str(p.get("sku") or "")))
-    return out
+    """A Evolt precisa de tratamento especial, e a razão é esta:
+
+    a pesquisa da Woo casa uma SUBSTRING contígua do texto todo, não palavra a
+    palavra. Os títulos lá são "ASA 1kg Black - Azurefilm", por isso `asa black`
+    devolve ZERO (o "1kg" fica pelo meio) enquanto `asa 1kg black` devolve sete.
+    Ninguém adivinha que tem de escrever o peso no meio, e era isto que fazia
+    desaparecer filamentos que a loja tem à venda.
+
+    Solução: pesquisa-se pelo termo mais selectivo (o material ou a marca, que
+    não mudam de língua), pagina-se, e o filtro fino é feito aqui com o léxico.
+    Como o filtro é local, deixa também de importar que a loja escreva "Black"
+    e a pesquisa venha em "preto"."""
+    directa = [_evolt_produto(p) for p in _evolt_pagina(q, 1, max(limite * 2, 20))]
+    if len(directa) >= limite:
+        return directa[:limite]
+
+    largo = termo_selectivo(q)
+    if not largo or largo == norm(q):
+        return directa[:limite]
+
+    vistos = {p["url"] for p in directa}
+    saida = list(directa)
+    # Em série de propósito: com _fields cada página anda em ~1,4 s, e abrir mais
+    # ligações em paralelo daqui de dentro (já estamos dentro do pool da busca)
+    # tirava banda às outras lojas -- a Amazon chegou a ir a timeout por isso.
+    paginas = []
+    for n in range(1, EVOLT_PAGINAS + 1):
+        bruto = _evolt_pagina(largo, n, 100)
+        paginas.append(bruto)
+        if len(bruto) < 100:
+            break
+    for bruto in paginas:
+        for item in bruto:
+            prod = _evolt_produto(item)
+            if prod["url"] in vistos:
+                continue
+            # aqui é que a pesquisa do utilizador conta, já com sinónimos
+            if pontua(prod["titulo"], prod.get("marca", ""), q) >= 0.99:
+                vistos.add(prod["url"])
+                saida.append(prod)
+    return saida[:limite]
 
 
 # ---------------------------------------------------------------- Core XY (PT) --
+
+def _corexy_img(cover: dict) -> str:
+    """A PrestaShop dá vários tamanhos em bySize; o `home_default` chega bem."""
+    if not isinstance(cover, dict):
+        return ""
+    por_tamanho = cover.get("bySize") or {}
+    for chave in ("home_default", "medium_default", "cart_default", "large_default"):
+        u = (por_tamanho.get(chave) or {}).get("url")
+        if u:
+            return u
+    m = cover.get("medium")
+    if isinstance(m, dict) and m.get("url"):
+        return m["url"]
+    return cover.get("url", "") or ""
+
 
 def busca_corexy(q: str, limite: int = 12) -> list[dict]:
     url = ("https://corexy.pt/pesquisa?"
@@ -191,9 +325,7 @@ def busca_corexy(q: str, limite: int = 12) -> list[dict]:
         out.append(_produto(
             "corexy", titulo=_txt(p.get("name")),
             preco=_num(p.get("price_amount") or p.get("price")),
-            url=p.get("url", ""), imagem=cover.get("medium", {}).get("url", "")
-            if isinstance(cover.get("medium"), dict) else cover.get("bySize", {})
-            .get("medium_default", {}).get("url", ""),
+            url=p.get("url", ""), imagem=_corexy_img(cover),
             stock=(stock > 0) if isinstance(stock, int) else None,
             marca=_txt(p.get("manufacturer_name")), ref=str(p.get("reference") or "")))
     return out
@@ -215,6 +347,9 @@ def _busca_shopify(loja: str, base: str, q: str, limite: int = 12) -> list[dict]
             img = img.get("url", "")
         if img.startswith("//"):
             img = "https:" + img
+        if img and "cdn.shopify.com" in img:
+            # a CDN da Shopify redimensiona a pedido: 141 KB passam a 16 KB
+            img += ("&" if "?" in img else "?") + "width=240"
         out.append(_produto(
             loja, titulo=_txt(p.get("title")), preco=preco,
             url=urllib.parse.urljoin(base, p.get("url", "")), imagem=img,
@@ -320,13 +455,13 @@ def pontua(titulo: str, marca: str, q: str) -> float:
 
 
 def traduz(q: str, alvo: str) -> str:
-    """Reescreve a pesquisa na língua da loja.
+    """Escreve a pesquisa numa das duas línguas.
 
-    A evolt.pt e a corexy.pt catalogam em português; a QIDI, a Elegoo e a Amazon
-    em inglês. Mandar "preto" a uma loja inglesa devolve zero, e "black" à Evolt
-    também -- por isso cada loja recebe a sua versão. Nas cores o primeiro alias
-    da tabela é sempre o inglês e a chave canónica é sempre a portuguesa, o que
-    torna a tradução uma consulta directa."""
+    Não serve para SUBSTITUIR o que foi escrito: a busca() manda as duas versões
+    além do texto original, porque uma loja portuguesa pode ter o produto
+    catalogado em inglês (a Evolt tem: "ASA 1kg Black") e vice-versa. Nas cores a
+    chave canónica é sempre a portuguesa e o primeiro alias é sempre o inglês, o
+    que torna isto uma consulta directa."""
     saida = []
     for token in norm(q).split():
         hits = _INDEX.get(token, [])
@@ -339,6 +474,25 @@ def traduz(q: str, alvo: str) -> str:
         else:
             saida.append(token)
     return " ".join(saida)
+
+
+def termo_selectivo(q: str) -> str:
+    """O termo por onde vale a pena pedir a lista larga a uma loja.
+
+    Materiais primeiro (conjunto pequeno e escrito igual em toda a parte),
+    marcas a seguir. Cores ficam de fora de propósito: pedir "preto" a uma loja
+    que cataloga em inglês devolve zero, e é justamente isso que se quer evitar."""
+    toks = [t for t in norm(q).split() if len(t) > 1]
+    if not toks:
+        return ""
+    for grupo in ("material", "marca"):
+        for t in toks:
+            hit = next((h for h in _INDEX.get(t, []) if h["g"] == grupo), None)
+            if hit:
+                return hit["c"] if grupo == "material" else t
+    naocor = [t for t in toks
+              if not any(h["g"] in ("cor", "formato") for h in _INDEX.get(t, []))]
+    return max(naocor or toks, key=len)
 
 
 def e_filamento(titulo: str) -> bool:
@@ -358,46 +512,70 @@ ADAPTADORES = {
 }
 
 
-def busca(q: str, lojas: list[str] | None = None, limite: int = 12) -> dict:
-    """Pesquisa em paralelo. Uma loja em baixo não derruba as outras: o erro dela
-    vai no relatório e os resultados das restantes seguem."""
-    alvo = [s for s in (lojas or list(ADAPTADORES)) if s in ADAPTADORES]
-    # (loja, termo) -- a variante traduzida e, se der noutra coisa, o texto tal
-    # como foi escrito; o que vier a dobrar é limpo pelo URL mais abaixo
-    tarefas: list[tuple[str, str]] = []
-    for loja in alvo:
-        termo = traduz(q, "pt" if LOJAS[loja]["pais"] == "PT" else "en")
-        tarefas.append((loja, termo))
-        if norm(q) != termo:
-            tarefas.append((loja, norm(q)))
+def _variantes(q: str, loja: str) -> list[str]:
+    """O que se manda a uma loja: o texto tal como foi escrito e as versões em
+    português e em inglês, sem repetidos. A da língua da loja vai à frente por
+    ser a que costuma acertar à primeira -- mas nenhuma é descartada."""
+    primeira = "pt" if LOJAS[loja]["pais"] == "PT" else "en"
+    ordem = [traduz(q, primeira), norm(q), traduz(q, "en" if primeira == "pt" else "pt")]
+    saida: list[str] = []
+    for v in ordem:
+        if v and v not in saida:
+            saida.append(v)
+    return saida
 
+
+def _busca_loja(loja: str, q: str, limite: int) -> list[dict]:
+    """Uma loja, uma ligação, as variantes em fila.
+
+    Antes mandavam-se todas as variantes de todas as lojas ao mesmo tempo -- 15
+    pedidos em paralelo -- e a Core XY e a Amazon iam a timeout. Assim cada loja
+    usa uma ligação de cada vez e pára mal tenha um produto que case TODOS os
+    termos escritos, que na prática é logo à primeira variante."""
+    saida: list[dict] = []
+    vistos: set[str] = set()
+    for variante in _variantes(q, loja):
+        for prod in _cached(loja, variante, ADAPTADORES[loja], limite) or []:
+            chave = prod["url"] or f"{prod['loja']}:{prod['titulo']}"
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            saida.append(prod)
+        if any(pontua(p["titulo"], p.get("marca", ""), q) >= 0.99 for p in saida):
+            break
+    return saida
+
+
+def busca(q: str, lojas: list[str] | None = None, limite: int = 12) -> dict:
+    """Pesquisa em paralelo, uma tarefa por loja. Uma loja em baixo não derruba
+    as outras: o erro dela vai no relatório e o resto segue."""
+    alvo = [s for s in (lojas or list(ADAPTADORES)) if s in ADAPTADORES]
     resultados: list[dict] = []
     erros: dict[str, str] = {}
-    consultas: dict[str, list[str]] = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(tarefas), 1)) as ex:
-        futuros = {ex.submit(_cached, loja, termo, ADAPTADORES[loja], limite):
-                   (loja, termo) for loja, termo in tarefas}
-        for fut in concurrent.futures.as_completed(futuros, timeout=TIMEOUT + 10):
-            loja, termo = futuros[fut]
-            consultas.setdefault(loja, []).append(termo)
+    consultas: dict[str, list[str]] = {loja: _variantes(q, loja) for loja in alvo}
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(alvo), 1)) as ex:
+        futuros = {ex.submit(_busca_loja, loja, q, limite): loja for loja in alvo}
+        for fut in concurrent.futures.as_completed(futuros, timeout=TIMEOUT * 3):
+            loja = futuros[fut]
             try:
                 resultados.extend(fut.result() or [])
             except Exception as e:  # noqa: BLE001 - queremos mesmo apanhar tudo
                 erros[loja] = f"{type(e).__name__}: {e}"[:200]
 
-    unicos: dict[str, dict] = {}
-    for p in resultados:
-        unicos.setdefault(p["url"] or f"{p['loja']}:{p['titulo']}", p)
-    resultados = list(unicos.values())
     for p in resultados:
         p["relevancia"] = round(pontua(p["titulo"], p.get("marca", ""), q), 3)
         p["filamento"] = e_filamento(p["titulo"])
-    # fora o que não casa nada com a pesquisa nem é sequer filamento
-    resultados = [p for p in resultados if p["relevancia"] > 0 and p["filamento"]]
-    # mais relevante primeiro; empatados, o €/kg mais barato à cabeça
-    resultados.sort(key=lambda p: (-p["relevancia"], p["preco"] is None,
-                                   p["preco_kg"] or p["preco"] or 9e9))
-    return {"query": q, "resultados": resultados, "erros": erros,
+    bons = [p for p in resultados if p["relevancia"] > 0 and p["filamento"]]
+    # com dois termos ou mais, exigir metade evita encher a lista de produtos que
+    # só casam a marca; se isso não deixar nada, mostra-se o que houver
+    termos = len([t for t in norm(q).split() if t])
+    if termos >= 2:
+        apertado = [p for p in bons if p["relevancia"] >= 0.6]
+        bons = apertado or bons
+    bons.sort(key=lambda p: (-p["relevancia"], p["preco"] is None,
+                             p["preco_kg"] or p["preco"] or 9e9))
+    return {"query": q, "resultados": bons, "erros": erros,
             "consultas": consultas, "lojas": {s: LOJAS[s] for s in alvo}}
 
 

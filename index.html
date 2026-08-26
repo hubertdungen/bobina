@@ -97,6 +97,17 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:12p
   position:relative;overflow:hidden}
 .swatch::after{content:"";position:absolute;inset:32% 32%;border-radius:50%;
   background:var(--panel);border:1px solid rgba(0,0,0,.35)}
+.bob{flex:none;display:block}
+.foto{flex:none;object-fit:contain;border-radius:10px;background:#fff}
+/* selector de cor: botões de amostra + roda RGB + voltar ao automático */
+.paleta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}
+.pcor{width:24px;height:24px;border-radius:7px;border:1px solid rgba(255,255,255,.18);
+  cursor:pointer;padding:0;min-height:0}
+.pcor:hover{outline:2px solid var(--accent);outline-offset:1px}
+.pcor.on{outline:2px solid var(--accent2);outline-offset:1px}
+input[type=color]{width:44px;height:32px;min-height:32px;padding:2px;cursor:pointer}
+.previa{display:flex;align-items:center;gap:10px;margin-top:8px}
+.previa .sub{line-height:1.3}
 .spool .nm{font-weight:700;font-size:14px;line-height:1.3}
 .spool .mt{font-size:12px;color:var(--dim);margin-top:3px}
 .bar{height:5px;border-radius:3px;background:var(--panel2);margin-top:7px;overflow:hidden}
@@ -232,8 +243,10 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
       <div class="field"><label>Onde fica</label><select id="mLocal"></select></div>
       <div class="field"><label>Estado</label><select id="mEstado">
         <option value="selado">selado</option><option value="aberto">aberto</option></select></div>
-      <div class="field"><label>Cor (amostra)</label><input id="mHex" type="color" value="#222222"></div>
     </div>
+    <div class="field" style="margin-top:12px"><label>Bobine — cor</label>
+      <div class="previa" id="mPrev"></div>
+      <div id="mPicker"></div></div>
     <div class="row" style="margin-top:12px"><button class="primary" id="mAdd">Adicionar</button></div>
   </div>
 </div>
@@ -388,6 +401,171 @@ function casaTermo(hay, t) {
 }
 function casa(hay, termos) { return termos.every(t => casaTermo(hay, t)); }
 
+
+/* ============================ cor e bobine desenhada ============================ */
+/* Quando não há foto da loja, a bobine é desenhada e pintada pelo que está escrito
+   na cor. O dicionário (~290 nomes) vem no mesmo /api/lexicon do resto. */
+const _corCache = new Map();
+const hex2rgb = h => { const n = parseInt(String(h).slice(1), 16);
+  return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+const rgb2hex = ([r, g, b]) => '#' + [r, g, b]
+  .map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+function rgb2hsl([r, g, b]) {
+  r /= 255; g /= 255; b /= 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  let h = 0; const l = (mx + mn) / 2;
+  const sat = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  if (d !== 0) {
+    if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4;
+    h *= 60; if (h < 0) h += 360;
+  }
+  return [h, sat, l];
+}
+function hsl2rgb([h, s, l]) {
+  const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+  const t = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+          : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return t.map(v => (v + m) * 255);
+}
+/* Mistura pesada: uma frase de duas palavras ("pastel mint") diz mais sobre a cor
+   do que a palavra solta que vem a seguir ("green"), por isso pesa o dobro. Sem
+   isto, "Pastel Mint Green" saía um verde chapado em vez de um verde pálido. */
+const mistura = pares => {
+  const total = pares.reduce((a, x) => a + x[1], 0) || 1;
+  return rgb2hex(pares.map(x => [hex2rgb(x[0]), x[1]])
+    .reduce((a, [c, w]) => a.map((v, i) => v + c[i] * w / total), [0, 0, 0]));
+};
+function aplicaModif(hex, m) {
+  let [h, s, l] = rgb2hsl(hex2rgb(hex));
+  if (m === 'escurecer') l = Math.max(0.05, l * 0.62);
+  else if (m === 'clarear') l = Math.min(0.93, l + (1 - l) * 0.45);
+  else if (m === 'pastel') { l = Math.min(0.9, l + (1 - l) * 0.55); s = s * 0.7; }
+  else if (m === 'saturar') { s = Math.min(1, s * 1.45 + 0.12); l = Math.min(0.72, l * 1.06); }
+  else if (m === 'dessaturar') s = s * 0.62;
+  else if (m === 'brilho') { s = Math.min(1, s * 1.12 + 0.04); l = Math.min(0.86, l + 0.06); }
+  return rgb2hex(hsl2rgb([h, s, l]));
+}
+/* Ordem: frase inteira do dicionário ("wood ash", "dark grey"), depois
+   modificadores ("silk", "dark"), depois o léxico normal ("azabache" -> preto).
+   Várias cores misturam-se, que é o que faz "purple-blue" dar azul-arroxeado. */
+function corDe(texto) {
+  if (!texto) return null;
+  if (_corCache.has(texto)) return _corCache.get(texto);
+  const toks = norm(texto).replace(/[-\/_+]/g, ' ').split(' ').filter(Boolean);
+  const bases = [], mods = [];
+  let i = 0;
+  while (i < toks.length) {
+    let saltou = 0;
+    for (let n = Math.min(3, toks.length - i); n >= 1 && !saltou; n--) {
+      const frase = toks.slice(i, i + n).join(' ');
+      if (LEX.hex && LEX.hex[frase]) { bases.push([LEX.hex[frase], n]); saltou = n; }
+    }
+    if (saltou) { i += saltou; continue; }
+    const tok = toks[i];
+    if (LEX.modif && LEX.modif[tok]) { mods.push(LEX.modif[tok]); i++; continue; }
+    const hit = (LEX.index[tok] || []).find(h => h.g === 'cor');
+    if (hit && LEX.hex && LEX.hex[hit.c]) { bases.push([LEX.hex[hit.c], 1]); i++; continue; }
+    i++;
+  }
+  let cor = bases.length ? (bases.length === 1 ? bases[0][0] : mistura(bases)) : null;
+  if (cor) for (const m of mods) cor = aplicaModif(cor, m);
+  _corCache.set(texto, cor);
+  return cor;
+}
+const luz = hex => { const [r, g, b] = hex2rgb(hex).map(v => {
+    v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+/* O contorno tem de ver-se sobre o fundo escuro da app: um preto #141414 num
+   painel #131922 não se distingue. O ENCHIMENTO mantém a cor verdadeira -- é o
+   filamento; só o traço é que sobe de luminosidade o suficiente para existir. */
+function visivel(hex) {
+  let [h, s, l] = rgb2hsl(hex2rgb(hex));
+  const y = luz(hex);
+  if (y < 0.05) l = Math.max(l, 0.32);
+  else if (y < 0.16) l = Math.max(l, 0.40);
+  if (y > 0.88) l = Math.min(l, 0.85);
+  return rgb2hex(hsl2rgb([h, s, l]));
+}
+const NEUTRA = '#8892a0';
+const eTransparente = txt => /transp|clear|natural|cristal|crystal|vidro|glass/.test(norm(txt || ''));
+/* Bobine vista de frente, em traço: aro, filamento enrolado com a folga por onde
+   sai a ponta, e o núcleo. Mesma linguagem do logótipo, em pequeno. */
+function bobinaSVG(cor, tam, transp) {
+  const c = cor || NEUTRA, linha = visivel(c);
+  return `<svg class="bob" viewBox="0 0 48 48" width="${tam}" height="${tam}" aria-hidden="true">
+    <circle cx="24" cy="24" r="20.5" fill="none" stroke="${linha}" stroke-width="1.8" opacity=".75"/>
+    <path d="M35.69 30.75 A13.5 13.5 0 1 1 35.69 17.25" fill="none" stroke="${c}"
+          stroke-width="7.5" stroke-linecap="round" opacity="${transp ? '.45' : '.95'}"/>
+    <path d="M35.69 17.25 c 4 -1.5, 6.5 2, 3.6 4.8" fill="none" stroke="${linha}"
+          stroke-width="2" stroke-linecap="round"/>
+    <circle cx="24" cy="24" r="6" fill="none" stroke="${linha}" stroke-width="1.8"/>
+  </svg>`;
+}
+const corDoFil = f => f.cor_hex || corDe(f.cor) || NEUTRA;
+/* A foto vem da NOSSA cache (/api/imagem), não da loja: assim continua a haver
+   foto no dia em que a loja mexer nos ficheiros. Se mesmo assim falhar, o
+   cartão troca sozinho para a bobine desenhada em vez de ficar com o ícone
+   partido do browser. */
+const fotoURL = u => '/api/imagem?u=' + encodeURIComponent(u);
+function media(f, tam) {
+  if (!f.icone && f.imagem) {
+    const alt = bobinaSVG(corDoFil(f), tam, eTransparente(f.cor)).replace(/"/g, '&quot;');
+    return `<img class="foto" src="${esc(fotoURL(f.imagem))}" width="${tam}" height="${tam}"
+      loading="lazy" alt="" data-alt="${alt}" onerror="this.outerHTML=this.dataset.alt">`;
+  }
+  return bobinaSVG(corDoFil(f), tam, eTransparente(f.cor));
+}
+
+
+/* Amostras rápidas: as cores que aparecem mesmo em prateleiras de filamento. */
+const PRESETS = ['#141414', '#f4f5f7', '#7b828c', '#4a4f57', '#c9ccd1', '#d4af37',
+  '#2563eb', '#16357a', '#14b8a6', '#16a34a', '#eab308', '#f97316', '#dc2626',
+  '#ec4899', '#8b5cf6', '#6b4423', '#dcc9a0', '#b1885a', '#dfe7ee'];
+
+function pickerHTML(id, valor) {
+  return `<div class="paleta" data-picker="${id}" data-hex="${esc(valor || '')}">
+    ${PRESETS.map(c => `<button type="button" class="pcor" data-c="${c}"
+      style="background:${c}" title="${c}"></button>`).join('')}
+    <input type="color" data-cin value="${esc(valor || NEUTRA)}" title="escolher à mão">
+    <button type="button" class="ghost" data-auto style="font-size:11px;padding:4px 8px">automática</button>
+  </div>`;
+}
+/* Devolve o hex escolhido, ou '' quando fica no automático (aí a cor sai do nome). */
+function ligaPicker(raiz, id, aoMudar) {
+  const box = raiz.querySelector(`[data-picker="${id}"]`);
+  if (!box) return () => '';
+  const poe = v => {
+    box.dataset.hex = v || '';
+    box.querySelectorAll('.pcor').forEach(b => b.classList.toggle('on', b.dataset.c === v));
+    if (v) box.querySelector('[data-cin]').value = v;
+    if (aoMudar) aoMudar(v);
+  };
+  box.querySelectorAll('.pcor').forEach(b => b.onclick = () => poe(b.dataset.c));
+  box.querySelector('[data-cin]').oninput = e => poe(e.target.value);
+  box.querySelector('[data-auto]').onclick = () => poe('');
+  poe(box.dataset.hex || '');
+  return () => box.dataset.hex || '';
+}
+/* A frase de cor tal como a loja a escreve ("Ocean Blue", "silk red"), tirada do
+   título. Vale mais do que reduzir tudo a "azul": guarda o nome bonito E dá ao
+   desenho a cor exacta. */
+function corFrase(titulo) {
+  const toks = norm(titulo).replace(/[-\/_+]/g, ' ').split(' ').filter(Boolean);
+  const out = [];
+  let i = 0;
+  while (i < toks.length) {
+    let saltou = 0;
+    for (let n = Math.min(3, toks.length - i); n >= 1 && !saltou; n--) {
+      const frase = toks.slice(i, i + n).join(' ');
+      if (LEX.hex && LEX.hex[frase]) { out.push(frase); saltou = n; }
+    }
+    if (saltou) { i += saltou; continue; }
+    if (LEX.modif && LEX.modif[toks[i]]) out.push(toks[i]);
+    i++;
+  }
+  return out.join(' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 /* ============================ derivados ============================ */
 function caminhoLocal(id) {
   const partes = [];
@@ -450,7 +628,7 @@ function cartao(f, termos) {
   const peso = f.peso_g >= 1000 ? (f.peso_g / 1000) + ' kg' : f.peso_g + ' g';
   const abertas = bs.filter(b => b.estado === 'aberto').length;
   return `<div class="spool" data-fil="${f.id}">
-    <div class="swatch" style="background:${esc(f.cor_hex || '#333a46')}"></div>
+    ${media(f, 44)}
     <div style="min-width:0;flex:1">
       <div class="nm">${realca(nome || 'sem nome', termos)}</div>
       <div class="mt">${esc(peso)} · ${realca(locais.join(' · '), termos)}</div>
@@ -497,6 +675,13 @@ async function abreFilamento(fid) {
   dlg.innerHTML = `<div class="dlg">
     <h2>${esc([f.marca, f.material, f.cor].filter(Boolean).join(' ') || 'filamento')}</h2>
     <div class="sub" style="margin-bottom:12px">${esc(f.peso_g)} g · ⌀${esc(f.diametro)} mm${f.ref ? ' · ref ' + esc(f.ref) : ''}</div>
+    <div class="previa" id="fPrev"></div>
+    <div class="field" style="margin-top:10px"><label>Cor (nome)</label>
+      <input id="fCor" value="${esc(f.cor || '')}" placeholder="ex.: Ocean Blue, wood ash, silk red"></div>
+    ${pickerHTML('det', f.cor_hex || '')}
+    ${f.imagem ? `<label class="row" style="margin-top:10px;font-size:12.5px;cursor:pointer">
+      <input type="checkbox" id="fIcone" ${f.icone ? 'checked' : ''} style="width:auto;min-height:auto">
+      desenhar a bobine em vez de usar a foto da loja</label>` : ''}
     ${precos.length ? `<h3>Melhor preço por loja</h3>${precos.map(p =>
       `<div class="mv"><span class="loja${INV.lojas[p.loja]?.pais === 'PT' ? ' pt' : ''}">${esc(INV.lojas[p.loja]?.nome || p.loja)}</span>
        <b>${eur(p.preco)}</b><span class="why">${p.preco_kg ? eur(p.preco_kg) + '/kg' : ''}</span>
@@ -520,6 +705,22 @@ async function abreFilamento(fid) {
     </div></div>`;
   document.body.appendChild(dlg);
   dlg.showModal();
+  let hexDet = f.cor_hex || '';
+  const prevDet = dlg.querySelector('#fPrev');
+  const desenhaDet = () => {
+    const nome = dlg.querySelector('#fCor').value;
+    const c = hexDet || corDe(nome) || NEUTRA;
+    const usaFoto = f.imagem && !(dlg.querySelector('#fIcone') || {}).checked;
+    prevDet.innerHTML = (f.imagem ? `<img class="foto" src="${esc(fotoURL(f.imagem))}" width="46" height="46"
+        alt="" style="opacity:${usaFoto ? 1 : .35}">` : '')
+      + bobinaSVG(c, 46, eTransparente(nome))
+      + `<div class="sub">${hexDet ? 'cor escolhida' : (corDe(nome) ? 'cor lida do nome' : 'sem cor reconhecida')}
+         <br>${esc(c)}${f.imagem ? (usaFoto ? ' · mostra a foto' : ' · mostra o desenho') : ''}</div>`;
+  };
+  const leHexDet = ligaPicker(dlg, 'det', v => { hexDet = v; desenhaDet(); });
+  dlg.querySelector('#fCor').addEventListener('input', desenhaDet);
+  if (dlg.querySelector('#fIcone')) dlg.querySelector('#fIcone').onchange = desenhaDet;
+  desenhaDet();
   const fecha = () => { dlg.close(); dlg.remove(); };
   dlg.querySelector('#dFechar').onclick = fecha;
   dlg.addEventListener('close', () => dlg.remove());
@@ -529,6 +730,11 @@ async function abreFilamento(fid) {
     fecha(); await carrega(); toast('bobine apagada');
   });
   dlg.querySelector('#dSalvar').onclick = async () => {
+    await api('/api/filamentos/' + fid, {method: 'PATCH', body: JSON.stringify({
+      cor: dlg.querySelector('#fCor').value,
+      cor_hex: leHexDet(),
+      icone: (dlg.querySelector('#fIcone') || {}).checked ? 1 : 0,
+    })});
     for (const c of dlg.querySelectorAll('[data-b]')) {
       const corpo = {};
       c.querySelectorAll('[data-k]').forEach(i => {
@@ -591,20 +797,29 @@ async function procuraLojas() {
    Poupa a escrita à mão, e tudo fica editável antes de gravar. */
 function adivinha(titulo) {
   const toks = norm(titulo).split(' ').filter(Boolean);
-  const achado = {marca: '', material: '', cor: ''};
+  const cand = {marca: [], material: [], cor: []};
   for (const t of toks) {
-    for (const h of (LEX.index[t] || [])) {
-      if (h.g === 'marca' && !achado.marca) achado.marca = h.c;
-      if (h.g === 'material' && !achado.material) achado.material = h.c.toUpperCase();
-      if (h.g === 'cor' && !achado.cor) achado.cor = h.c;
-    }
+    const hits = LEX.index[t] || [];
+    const grupos = new Set(hits.map(h => h.g));
+    for (const h of hits)
+      if (cand[h.g]) cand[h.g].push({c: h.c, t, unico: grupos.size === 1});
   }
+  /* Não vale ficar pelo primeiro que aparece: num "PLA Silk (Refill) 1kg Ocean
+     Blue - Azurefilm", o "refill" vinha antes e a marca saía errada. Ganha o
+     termo que só pode ser aquilo (não é também cor, nem formato) e, em empate,
+     o mais comprido. */
+  const escolhe = arr => {
+    if (!arr.length) return '';
+    arr.sort((a, b) => (b.unico - a.unico) || (b.t.length - a.t.length));
+    return arr[0].c;
+  };
+  const achado = {marca: escolhe(cand.marca), material: escolhe(cand.material).toUpperCase(),
+                  cor: escolhe(cand.cor)};
+  // o nome como a loja o escreve ganha ao canónico: "Ocean Blue" > "azul"
+  const frase = corFrase(titulo);
+  if (frase) achado.cor = frase;
   return achado;
 }
-const HEX = {preto:'#141414',branco:'#f2f2f2',cinzento:'#7b828c',prateado:'#c9ccd1',dourado:'#d4af37',
-  bronze:'#8c6239',cobre:'#b45f2b',azul:'#2563eb',turquesa:'#14b8a6',verde:'#16a34a',amarelo:'#eab308',
-  laranja:'#f97316',vermelho:'#dc2626',rosa:'#ec4899',roxo:'#8b5cf6',castanho:'#6b4423',bege:'#d9c9a8',
-  transparente:'#dfe7ee',multicor:'#a78bfa'};
 
 async function adicionaDeLoja(p) {
   const g = adivinha(p.titulo);
@@ -615,13 +830,15 @@ async function adicionaDeLoja(p) {
       <div class="field"><label>Marca</label><input id="xMarca" value="${esc(g.marca)}"></div>
       <div class="field"><label>Material</label><input id="xMat" value="${esc(g.material)}"></div>
       <div class="field"><label>Cor</label><input id="xCor" value="${esc(g.cor)}"></div>
-      <div class="field"><label>Cor (amostra)</label><input id="xHex" type="color" value="${HEX[g.cor] || '#8892a0'}"></div>
       <div class="field"><label>Peso (g)</label><input id="xPeso" type="number" value="${p.peso_g || 1000}"></div>
       <div class="field"><label>Preço pago (€)</label><input id="xPreco" type="number" step="0.01" value="${p.preco ?? ''}"></div>
       <div class="field"><label>Quantas</label><input id="xQtd" type="number" value="1" min="1"></div>
       <div class="field"><label>Onde fica</label><select id="xLocal">${
         INV.locais.map(l => `<option value="${l.id}">${esc(caminhoLocal(l.id))}</option>`).join('')}</select></div>
     </div>
+    <div class="field" style="margin-top:12px"><label>Bobine — cor</label>
+      <div class="previa" id="xPrev"></div>
+      ${pickerHTML('add', '')}</div>
     <div class="row" style="margin-top:14px">
       <button class="primary" id="xOk">Adicionar ao inventário</button>
       <button class="ghost" id="xNo" style="margin-left:auto">cancelar</button>
@@ -629,12 +846,27 @@ async function adicionaDeLoja(p) {
   document.body.appendChild(dlg); dlg.showModal();
   dlg.addEventListener('close', () => dlg.remove());
   dlg.querySelector('#xNo').onclick = () => dlg.close();
+  /* prévia ao vivo: mostra a foto da loja quando existe e, ao lado, a bobine
+     desenhada com a cor que sair do nome (ou da que for escolhida à mão) */
+  const prev = dlg.querySelector('#xPrev');
+  let hexEscolhido = '';
+  const desenha = () => {
+    const nome = dlg.querySelector('#xCor').value;
+    const c = hexEscolhido || corDe(nome) || NEUTRA;
+    prev.innerHTML = (p.imagem ? `<img class="foto" src="${esc(p.imagem)}" width="46" height="46" alt="">` : '')
+      + bobinaSVG(c, 46, eTransparente(nome))
+      + `<div class="sub">${hexEscolhido ? 'cor escolhida' : (corDe(nome) ? 'cor lida de <b>' + esc(nome) + '</b>' : 'sem cor reconhecida')}
+         <br>${esc(c)}${p.imagem ? ' · a loja tem foto' : ''}</div>`;
+  };
+  const leHex = ligaPicker(dlg, 'add', v => { hexEscolhido = v; desenha(); });
+  dlg.querySelector('#xCor').addEventListener('input', desenha);
+  desenha();
   dlg.querySelector('#xOk').onclick = async () => {
     const v = id => dlg.querySelector(id).value;
     try {
       await api('/api/adicionar', {method: 'POST', body: JSON.stringify({
         filamento: {marca: v('#xMarca'), material: v('#xMat'), cor: v('#xCor'),
-                    cor_hex: v('#xHex'), peso_g: +v('#xPeso') || 1000,
+                    cor_hex: leHex(), peso_g: +v('#xPeso') || 1000,
                     url: p.url, imagem: p.imagem, loja: p.loja, ref: p.ref || '', seguir: 1},
         bobine: {local_id: +v('#xLocal') || null, preco: +v('#xPreco') || 0,
                  comprado_loja: p.loja, comprado_url: p.url, estado: 'selado',
@@ -654,7 +886,7 @@ function desenhaPrecos() {
     const ps = (INV.precos[f.id] || []).slice().sort((a, b) => (a.preco_kg || a.preco) - (b.preco_kg || b.preco));
     const nome = [f.marca, f.material, f.cor].filter(Boolean).join(' ');
     return `<div class="card" style="margin-bottom:10px">
-      <div class="row"><div class="swatch" style="background:${esc(f.cor_hex || '#333a46')};width:28px;height:28px"></div>
+      <div class="row">${media(f, 30)}
         <b>${esc(nome)}</b>
         <button class="ghost" data-pf="${f.id}" style="margin-left:auto">actualizar</button></div>
       ${ps.length ? ps.map(p => `<div class="mv">
@@ -788,6 +1020,25 @@ async function desenhaDef() {
       O Fatia lê-o sozinho — não precisas de copiar nada.</div>`;
 }
 
+/* O selector do formulário manual é montado uma vez, quando a app abre. */
+let mHex = () => '';
+function montaPickerManual() {
+  $('#mPicker').innerHTML = pickerHTML('man', '');
+  const prev = $('#mPrev');
+  let escolhido = '';
+  const desenha = () => {
+    const nome = $('#mCor').value;
+    const c = escolhido || corDe(nome) || NEUTRA;
+    prev.innerHTML = bobinaSVG(c, 46, eTransparente(nome))
+      + `<div class="sub">${escolhido ? 'cor escolhida'
+          : (corDe(nome) ? 'cor lida de <b>' + esc(nome) + '</b>' : 'escreve a cor, ou escolhe uma')}
+         <br>${esc(c)}</div>`;
+  };
+  mHex = ligaPicker(document, 'man', v => { escolhido = v; desenha(); });
+  $('#mCor').addEventListener('input', desenha);
+  desenha();
+}
+
 /* ============================ auth + arranque ============================ */
 async function carrega() {
   INV = await api('/api/inventario');
@@ -823,6 +1074,7 @@ async function arranca() {
     return;
   }
   $('#app').hidden = false; $('#navtabs').hidden = false;
+  montaPickerManual();
   await carrega();
   desenhaDef().catch(() => {});
   listaPlanos();
@@ -864,7 +1116,7 @@ $('#mAdd').onclick = async () => {
   if (!v('#mMarca') && !v('#mMat') && !v('#mCor')) return toast('dá-lhe pelo menos marca, material ou cor');
   try {
     await api('/api/adicionar', {method: 'POST', body: JSON.stringify({
-      filamento: {marca: v('#mMarca'), material: v('#mMat'), cor: v('#mCor'), cor_hex: v('#mHex'),
+      filamento: {marca: v('#mMarca'), material: v('#mMat'), cor: v('#mCor'), cor_hex: mHex(),
                   peso_g: +v('#mPeso') || 1000, seguir: 1},
       bobine: {local_id: +v('#mLocal') || null, preco: +v('#mPreco') || 0, estado: v('#mEstado'),
                comprado_em: new Date().toISOString().slice(0, 10)},
