@@ -30,7 +30,7 @@ import lexicon
 import lojas
 
 ROOT = Path(__file__).resolve().parent
-VERSAO = "1.3.0"
+VERSAO = "1.4.0"
 SESSION_COOKIE = "bobina_session"
 SESSION_DIAS = int(os.environ.get("BOBINA_SESSION_DAYS", "30"))
 MAX_BODY = int(os.environ.get("BOBINA_MAX_BODY", "2097152"))
@@ -137,6 +137,8 @@ CREATE TABLE IF NOT EXISTS bobines (
   comprado_loja TEXT DEFAULT '',
   comprado_url TEXT DEFAULT '',
   aberto_em TEXT DEFAULT '',
+  -- 1 = ainda tem a caixa original (é onde costuma andar o exsicante)
+  caixa INTEGER DEFAULT 0,
   notas TEXT DEFAULT '',
   criado_em INTEGER NOT NULL,
   actualizado_em INTEGER NOT NULL
@@ -185,6 +187,9 @@ def abre_db(data_dir: Path) -> sqlite3.Connection:
     cols_fil = {r[1] for r in con.execute("PRAGMA table_info(filamentos)")}
     if "icone" not in cols_fil:
         con.execute("ALTER TABLE filamentos ADD COLUMN icone INTEGER DEFAULT 0")
+    cols_bob = {r[1] for r in con.execute("PRAGMA table_info(bobines)")}
+    if "caixa" not in cols_bob:
+        con.execute("ALTER TABLE bobines ADD COLUMN caixa INTEGER DEFAULT 0")
     con.commit()
     DB = con
     return con
@@ -338,7 +343,7 @@ IMG_TIPOS = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
 # Só se vai buscar imagens às lojas que a app conhece -- sem isto, /api/imagem
 # era um proxy aberto para qualquer endereço que alguém quisesse pôr no campo.
 IMG_HOSTS = (
-    "evolt.pt", "corexy.pt", "qidi3d.com", "elegoo.com",
+    "evolt.pt", "corexy.pt", "reprap.pt", "qidi3d.com", "elegoo.com",
     "cdn.shopify.com", "shopify.com",
     "media-amazon.com", "ssl-images-amazon.com", "images-amazon.com",
 )
@@ -395,7 +400,7 @@ def token_ponte() -> str:
 
     O Fatia corre no mesmo utilizador e na mesma máquina, por isso lê o ficheiro
     e faz o pedido do lado do servidor. Assim não há CORS nem cookies entre
-    portas, e o Hubert não tem de copiar nada de uma app para a outra."""
+    portas, e não há nada para copiar de uma app para a outra."""
     f = ficheiro_token()
     if f.exists():
         t = f.read_text().strip()
@@ -548,7 +553,7 @@ CAMPOS_FILAMENTO = ["marca", "material", "cor", "cor_hex", "diametro", "peso_g",
                     "loja", "etiquetas", "notas", "icone", "seguir", "seguir_query"]
 CAMPOS_BOBINE = ["filamento_id", "etiqueta", "local_id", "peso_liquido_g", "restante_g",
                  "tara_g", "estado", "preco", "moeda", "comprado_em", "comprado_loja",
-                 "comprado_url", "aberto_em", "notas"]
+                 "comprado_url", "aberto_em", "caixa", "notas"]
 CAMPOS_LOCAL = ["nome", "pai_id", "tipo", "notas", "capacidade", "ordem"]
 
 
@@ -692,9 +697,13 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as e:  # noqa: BLE001
                 return self.erro(f"lojas indisponíveis: {e}", 502)
         if caminho == "/api/ponte":
+            # o endereço sai do Host do próprio pedido: quem abrir a app por
+            # outro nome ou noutra porta recebe o endereço certo, em vez de um
+            # hostname escrito à mão que só existia numa máquina
+            host = self.headers.get("Host") or f"127.0.0.1:{self.server.server_address[1]}"
             return self.json({
                 "token": token_ponte(),
-                "url": f"http://pavilion-nas:8100/api/fatia/filamentos?token={token_ponte()}",
+                "url": f"http://{host}/api/fatia/filamentos?token={token_ponte()}",
                 "ficheiro": str(ficheiro_token()),
             })
         if caminho == "/api/definicoes":

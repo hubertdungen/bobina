@@ -3,8 +3,8 @@
 Inventário de filamento para impressão 3D: o que tenho, onde está, quanto resta,
 quanto custa em cada loja — e um agente que ajuda a arrumar.
 
-Corre em `http://pavilion-nas:8100`. Python da biblioteca padrão, sem dependências,
-SQLite em `~/.local/share/bobina/bobina.db`. Mesmo molde do Fatia e do Rumo.
+Python da biblioteca padrão, **sem dependências**: corre com o `python3` do sistema.
+Serve em `:8100` e guarda tudo num SQLite em `~/.local/share/bobina/bobina.db`.
 
 ## O que faz
 
@@ -14,16 +14,18 @@ formatos, em português e inglês. `ASA Azure Preto` encontra um *AzureFilm ASA
 Black*; `grey` encontra *Cinzento*; `azu` já chega para a AzureFilm aparecer.
 "Azure" é de propósito marca **e** cor — casa com as duas.
 
-**Preços.** Cinco lojas (`lojas.py`): Evolt e Core XY (PT), QIDI EU, Elegoo EU e
-Amazon. Cada loja recebe o texto tal como foi escrito **mais** as versões em
+**Preços.** Seis lojas (`lojas.py`): Evolt, Core XY e RepRap PT (Portugal),
+QIDI EU, Elegoo EU e Amazon. Cada loja recebe o texto tal como foi escrito **mais** as versões em
 português e em inglês — a língua soma-se, nunca substitui, para nenhuma loja
 ficar de fora só por catalogar na outra. Actualiza sozinho de 24 em 24 horas e
 guarda o histórico.
 
-A Evolt leva tratamento à parte: a pesquisa da WooCommerce casa uma *substring*
-contígua do título, por isso `asa black` devolve zero enquanto `asa 1kg black`
-devolve sete — o "1kg" fica pelo meio. Pesquisa-se pelo termo mais selectivo,
-pagina-se e o filtro fino é feito cá com o léxico.
+Cada loja tem a sua manha. A Evolt corre WooCommerce, cuja pesquisa casa uma
+*substring* contígua do título: `asa black` devolve zero e `asa 1kg black`
+devolve sete, porque o "1kg" fica pelo meio — daí pesquisar-se pelo termo mais
+selectivo, paginar e filtrar cá com o léxico. A RepRap PT tem plataforma própria
+e só responde com o conjunto todo de parâmetros (`terms` sozinho devolve uma
+página vazia), mas em troca diz o peso e o diâmetro em badges próprias.
 
 **Fotos.** A foto da loja é guardada em `~/.local/share/bobina/imagens` e servida
 por `/api/imagem` — o endereço da loja sozinho não chegava, parte no dia em que
@@ -60,9 +62,34 @@ correm nesta máquina e falam por um segredo em `~/.local/share/bobina/bridge.to
 | `agente.py`  | o agente de arrumação; devolve um plano, nunca escreve |
 | `index.html` | a app toda, num ficheiro |
 
+## Pôr a andar
+
+Não há nada para instalar além do Python 3 (10 ou mais recente). Sem `pip`, sem
+`node`, sem base de dados a correr ao lado.
+
+    git clone https://github.com/hubertdungen/bobina.git
+    cd bobina
+    python3 server.py --port 8100
+
+Abre `http://localhost:8100`, cria a conta na primeira visita (essa fica dona do
+inventário) e está feito. Os dados ficam em `~/.local/share/bobina/`.
+
+Para o agente de arrumação é preciso uma chave de API — Claude, GPT, Gemini ou
+DeepSeek, à escolha em *Definições*. O resto da app funciona sem nenhuma.
+
 ## Manutenção
 
     ~/scripts/bobina-server.sh {start|stop|restart|status}
     ~/scripts/bobina-backup.sh          # DB + repo para dentro de 2_CONFIG (cron 03:05)
 
 Arranca no boot e é vigiado de 5 em 5 minutos pelo cron.
+
+## Licença
+
+Código disponível, não é código aberto. **Uso pessoal gratuito; uso comercial
+exige licença acordada com o autor** — [`LICENSE`](LICENSE) (inglês, prevalece)
+e [`LICENCA.md`](LICENCA.md) (português).
+
+As lojas referidas não têm qualquer ligação a este projeto. Os preços que a app
+mostra são lidos das páginas públicas delas, são informativos e ficam
+desactualizados — confirma sempre no site da loja antes de comprar.

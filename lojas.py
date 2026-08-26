@@ -39,6 +39,7 @@ LOJAS = {
     "corexy":  {"nome": "Core XY",      "pais": "PT", "url": "https://corexy.pt"},
     "qidi":    {"nome": "QIDI EU",      "pais": "EU", "url": "https://eu.qidi3d.com"},
     "elegoo":  {"nome": "Elegoo EU",    "pais": "EU", "url": "https://eu.elegoo.com"},
+    "reprap":  {"nome": "RepRap PT",     "pais": "PT", "url": "https://reprap.pt"},
     "amazon":  {"nome": "Amazon ES",    "pais": "ES", "url": "https://www.amazon.es"},
 }
 
@@ -142,14 +143,16 @@ PESO_RE = re.compile(
 def peso_g(titulo: str) -> float | None:
     """Peso de filamento a partir do título ('... 1Kg', '500g', '2 x 1kg').
 
-    Só conta pesos plausíveis para uma bobine (100 g a 10 kg): assim '1.75mm'
-    nunca é lido como peso e '3D' também não."""
+    Só conta pesos plausíveis para uma bobine (20 g a 10 kg): assim '1.75mm'
+    nunca é lido como peso e '3D' também não. O mínimo é 20 g e não 100 g por
+    causa das amostras -- a Evolt e a RepRap vendem bobines de 25 e de 50 g, e
+    estavam a ficar sem peso nenhum, logo sem preço por quilo."""
     for valor, unidade in PESO_RE.findall(titulo or ""):
         n = _num(valor)
         if n is None:
             continue
         g = n * 1000 if unidade.lower().startswith(("kg", "quilo")) else n
-        if 100 <= g <= 10000:
+        if 20 <= g <= 10000:
             return g
     return None
 
@@ -365,6 +368,53 @@ def busca_elegoo(q: str, limite: int = 12) -> list[dict]:
     return _busca_shopify("elegoo", "https://eu.elegoo.com", q, limite)
 
 
+# --------------------------------------------------------------- RepRap (PT) --
+
+_RR_CELULA = re.compile(r"<div class='product-cell'>(.*?)(?=<div class='product-cell'>|$)", re.S)
+
+
+def busca_reprap(q: str, limite: int = 12) -> list[dict]:
+    """A loja da RepRap PT corre uma plataforma própria (keeplisted).
+
+    Duas coisas a saber. Primeira: a pesquisa só responde com o conjunto TODO de
+    parâmetros -- `?terms=X` sozinho devolve uma página sem produtos, e é preciso
+    levar também `cat`, `marca`, `category` e `trademark`, mesmo vazios. Segunda:
+    os cartões trazem o peso e o diâmetro em badges próprias, o que é melhor do
+    que adivinhá-los pelo título como se faz nas outras lojas."""
+    url = "https://reprap.pt/loja/search/?" + urllib.parse.urlencode(
+        {"terms": q, "cat": 0, "marca": 0, "category": "", "trademark": ""})
+    pagina = _get(url).decode("utf-8", "replace")
+    out = []
+    for bruto in _RR_CELULA.findall(pagina):
+        t = re.search(r"class='product-title'>.*?<b>(.*?)</b>", bruto, re.S)
+        if not t:
+            continue
+        titulo = _txt(t.group(1))
+        link = re.search(r"href='(/loja/produto/\?[^']+)'", bruto)
+        img = re.search(r"<img[^>]+src='([^']+)'", bruto)
+        preco = re.search(r"class='product-price'>\s*<b>([^<]+)</b>", bruto)
+        sku = re.search(r"class='product-sku'>SKU:\s*([^<]+)<", bruto)
+        stock = re.search(r"Stock:\s*(\d+)", bruto)
+        # badge-peso badge-50g / badge-1kg -- o peso dito pela loja, não adivinhado
+        peso = re.search(r"class='badge-peso[^']*'>([^<]+)<", bruto)
+        prod = _produto(
+            "reprap", titulo=titulo, preco=_num(preco.group(1)) if preco else None,
+            url=urllib.parse.urljoin("https://reprap.pt", link.group(1)) if link else "",
+            imagem=img.group(1) if img else "",
+            stock=(int(stock.group(1)) > 0) if stock else None,
+            ref=_txt(sku.group(1)) if sku else "")
+        if peso:
+            g = peso_g(_txt(peso.group(1)))
+            if g:
+                prod["peso_g"] = g
+                prod["preco_kg"] = (round(prod["preco"] / (g / 1000.0), 2)
+                                    if prod["preco"] else None)
+        out.append(prod)
+        if len(out) >= limite:
+            break
+    return out
+
+
 # ---------------------------------------------------------------- Amazon (ES) --
 
 _ASIN_RE = re.compile(r'data-asin="([A-Z0-9]{10})"')
@@ -422,7 +472,10 @@ NAO_FILAMENTO = ("resin", "resina", "printer", "impressora", "nozzle", "bico",
                  "build plate", "placa", "hotend", "extruder", "extrusor",
                  "scanner", "laser", "cure", "washing", "spare", "peca",
                  "kit", "cable", "cabo", "sensor", "motor", "belt", "correia",
-                 "screen", "ecra", "adhesive", "cola", "glue", "tool", "chave")
+                 "screen", "ecra", "adhesive", "cola", "glue", "tool", "chave",
+                 "tubo", "tube", "ptfe", "teflon", "conector", "connector",
+                 "acoplador", "coupler", "caneta", "pen", "livro", "book",
+                 "suporte", "holder", "secador", "dryer", "desumidificador")
 
 
 def _expande(token: str) -> set[str]:
@@ -497,10 +550,13 @@ def termo_selectivo(q: str) -> str:
 
 def e_filamento(titulo: str) -> bool:
     t = norm(titulo)
-    if any(re.search(r"(?<![a-z])" + re.escape(w), t) for w in NAO_FILAMENTO):
-        # "PLA Filament" ganha a "kit": se diz filamento/bobine, é filamento
-        return bool(re.search(r"(?<![a-z])(filament|filamento|bobine|spool|refill|refil)", t))
-    return True
+    if not any(re.search(r"(?<![a-z])" + re.escape(w), t) for w in NAO_FILAMENTO):
+        return True
+    # Havendo uma palavra suspeita, só se safa quem tiver PESO ou disser bobine.
+    # A regra anterior aceitava qualquer título com a palavra "filamento" e por
+    # isso deixava passar "Tubo PTFE para conector de filamento Sunlu".
+    return bool(peso_g(titulo)
+                or re.search(r"(?<![a-z])(bobine|bobina|spool|refill|refil)", t))
 
 
 ADAPTADORES = {
@@ -508,6 +564,7 @@ ADAPTADORES = {
     "corexy": busca_corexy,
     "qidi": busca_qidi,
     "elegoo": busca_elegoo,
+    "reprap": busca_reprap,
     "amazon": busca_amazon,
 }
 

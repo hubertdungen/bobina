@@ -1,0 +1,115 @@
+Bobina Licence 1.0
+Copyright (c) 2026 Hubert Dungen. All rights reserved.
+
+This is a source-available licence, not an open-source licence. Personal use is
+free. Commercial use requires a paid licence agreed in advance with the author.
+
+
+1. DEFINITIONS
+
+"Software" means the Bobina application, its source code, bundled reference data
+(including the colour and material lexicon) and accompanying documentation.
+
+"Personal Use" means use by an individual for private purposes, learning,
+research, evaluation, or for producing objects that are not sold, bartered or
+otherwise exchanged for value.
+
+"Commercial Use" means any use of the Software in connection with activity that
+generates or is intended to generate revenue. This includes, without limitation,
+using the Software to price, quote or invoice goods or services that are sold,
+and use by or on behalf of a company, sole trader or other organisation in the
+course of its business.
+
+"Monthly Revenue" means the gross revenue of the licensee entity, from all
+activities, in the calendar month concerned.
+
+
+2. GRANT FOR PERSONAL USE
+
+The author grants you a worldwide, royalty-free, non-exclusive licence to use,
+copy, modify and create derivative works of the Software for Personal Use, free
+of charge, subject to sections 4 to 8.
+
+
+3. COMMERCIAL USE
+
+Commercial Use requires a separate written licence from the author, agreed in
+advance. Commercial licences are offered on the following terms:
+
+  (a) EUR 10 per month, for licensees whose Monthly Revenue does not
+      exceed EUR 10,000.
+
+  (b) EUR 100 per month, for licensees whose Monthly Revenue exceeds
+      EUR 10,000.
+
+Prices are per licensee entity and exclude any applicable taxes. The bracket is
+assessed monthly; a licensee that crosses the threshold moves to bracket (b) for
+the months in which the threshold is exceeded. The author may agree different
+terms in writing for a particular licensee.
+
+To obtain a commercial licence, contact the author before commercial use begins.
+Continued Commercial Use without a licence terminates the rights granted by this
+licence.
+
+
+4. REDISTRIBUTION
+
+You may redistribute the Software, modified or unmodified, provided that:
+
+  (a) this licence file is included in full and unaltered;
+  (b) the author is credited and any existing copyright notices are kept;
+  (c) you do not charge for the Software itself, and do not sublicense it;
+  (d) you make clear which parts you changed, if any.
+
+You may not redistribute the Software as part of a paid product or service
+without a commercial licence under section 3.
+
+
+5. REFERENCE DATA AND THIRD-PARTY SHOPS
+
+The Software bundles a lexicon of brand, material, colour and format names used
+in 3D printing. It is an aid to searching, not an authority: names are added by
+hand, vary between manufacturers, and go out of date.
+
+The Software can also read publicly available product listings from third-party
+online shops in order to show prices. Those prices belong to the shops, are
+gathered at the moment of the request, and are shown for information only. They
+are not offers, they go stale, and a shop may change its site at any time and
+break the reading of it. Verify any price on the shop's own site before relying
+on it. The author does not warrant that any figure is accurate, current or fit
+for any purpose, and is not affiliated with, endorsed by, or acting on behalf of
+any shop named in the Software. You are responsible for using the Software in a
+way that respects the terms of service and the technical limits of any site it
+contacts.
+
+
+6. NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+
+7. LIMITATION OF LIABILITY
+
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. This includes, without limitation, loss arising from purchases made on
+the basis of prices or stock figures shown by the Software.
+
+
+8. TERMINATION
+
+This licence terminates automatically if you breach its terms. Sections 5, 6 and
+7 survive termination.
+
+
+9. GOVERNING LAW
+
+This licence is governed by the laws of Portugal.
+
+
+10. CONTACT
+
+Commercial licensing and any other questions: hubertkenobi@gmail.com

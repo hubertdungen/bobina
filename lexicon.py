@@ -299,7 +299,7 @@ CORES_HEX: dict[str, str] = {
     "cabedal": "#8a5a35", "walnut": "#5d4033", "nogueira": "#5d4033",
     "oak": "#b08b56", "carvalho": "#b08b56", "cork": "#c19a6b",
     "cortica": "#c19a6b", "bamboo": "#c9a86a", "bambu": "#c9a86a",
-    # os "wood" que o Hubert citou: são uma família por si, e clarinhos
+    # os "wood" são uma família por si, e puxam todos para o claro
     "wood": "#b1885a", "madeira": "#b1885a",
     "wood light": "#cdab7d", "light wood": "#cdab7d", "madeira clara": "#cdab7d",
     "wood dark": "#7a5636", "dark wood": "#7a5636", "madeira escura": "#7a5636",

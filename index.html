@@ -86,6 +86,21 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:12p
   background:var(--panel2);color:var(--dim);cursor:pointer}
 .chip:hover{border-color:var(--accent);color:var(--txt)}
 .chip.on{background:var(--accent);color:#160b33;border-color:var(--accent)}
+/* Interruptor: o próprio botão é a marca. Ligado toma o roxo da app — o mesmo
+   das chips e do resto da identidade — e desligado fica neutro. Sem a caixinha
+   do sistema, que destoava de tudo. */
+.tog{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;
+  padding:6px 11px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);
+  color:var(--dim);cursor:pointer;user-select:none;transition:.15s;min-height:32px;
+  position:relative;line-height:1}
+.tog input{position:absolute;opacity:0;width:0;height:0;margin:0;pointer-events:none}
+.tog:hover{border-color:var(--accent);color:var(--txt)}
+.tog svg{color:currentColor}
+.tog.on,.tog:has(input:checked){border-color:var(--accent);color:var(--accent);
+  background:rgba(167,139,250,.16)}
+.tog.on:hover,.tog:has(input:checked):hover{border-color:var(--accent2);color:var(--accent2)}
+/* o teclado tem de continuar a ver onde está */
+.tog:focus-within{outline:2px solid var(--accent);outline-offset:2px}
 .termo{background:rgba(167,139,250,.22);border-radius:4px;padding:0 2px}
 
 /* ---- vista agrupada por local ---- */
@@ -268,9 +283,14 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
       <div class="field"><label>Peso (g)</label><input id="mPeso" type="number" value="1000"></div>
       <div class="field"><label>Preço pago (€)</label><input id="mPreco" type="number" step="0.01"></div>
       <div class="field"><label>Quantas bobines</label><input id="mQtd" type="number" value="1" min="1"></div>
+      <div class="field" id="mRestWrap"><label>Restante (g)</label>
+        <input id="mRest" type="number" min="0" step="10" value="1000"></div>
       <div class="field"><label>Onde fica</label><select id="mLocal"></select></div>
       <div class="field"><label>Estado</label><select id="mEstado">
         <option value="selado">selado</option><option value="aberto">aberto</option></select></div>
+      <div class="field"><label>Embalagem</label>
+        <label class="tog" id="mCaixaChip" style="align-self:flex-start">
+          <input type="checkbox" id="mCaixa"><span class="cxglifo"></span>tem caixa</label></div>
     </div>
     <div class="field" style="margin-top:12px"><label>Bobine — cor</label>
       <div class="previa" id="mPrev"></div>
@@ -347,7 +367,9 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
 </div>
 
 <footer>
-  <div><b style="color:var(--accent)">Bobina</b> <span id="ver"></span> · uso pessoal</div>
+  <div><b style="color:var(--accent)">Bobina</b> <span id="ver"></span> · uso pessoal livre ·
+    uso comercial sob consulta ·
+    <a href="https://github.com/hubertdungen/bobina/blob/main/LICENCA.md" target="_blank" rel="noopener">ver licença</a></div>
   <div class="dlxsig">
     <span class="pw">powered by</span>
     <svg class="dlxmark" viewBox="0 0 742 510" role="img" aria-label="DL X"><use href="#dlxmark"/></svg>
@@ -529,19 +551,49 @@ function bobinaSVG(cor, tam, transp) {
     <circle cx="24" cy="24" r="6" fill="none" stroke="${linha}" stroke-width="1.8"/>
   </svg>`;
 }
+/* Caixa de cartão vista de frente, no mesmo traço da bobine: corpo, tampa, fita
+   e uma etiqueta que leva a cor do filamento -- assim distingue-se de relance o
+   que ainda está fechado na caixa (com o exsicante lá dentro) do que já anda à
+   solta na prateleira. */
+function caixaSVG(cor, tam, transp) {
+  const c = cor || NEUTRA, linha = visivel(c);
+  return `<svg class="bob" viewBox="0 0 48 48" width="${tam}" height="${tam}" aria-hidden="true">
+    <path d="M7.5 17.5 h33 v20 a3.5 3.5 0 0 1 -3.5 3.5 h-26 a3.5 3.5 0 0 1 -3.5 -3.5 z"
+          fill="none" stroke="${linha}" stroke-width="1.9" stroke-linejoin="round"/>
+    <rect x="4.5" y="9.5" width="39" height="8" rx="2.2" fill="none"
+          stroke="${linha}" stroke-width="1.9"/>
+    <path d="M24 9.5 v8" stroke="${linha}" stroke-width="1.9"/>
+    <rect x="16" y="24" width="16" height="11" rx="2.4" fill="${c}"
+          opacity="${transp ? '.45' : '.92'}"/>
+  </svg>`;
+}
+const temCaixa = b => !!(+b.caixa);
+/* Uma miniatura só chega para um estado: mostra-se caixa quando TODAS as
+   bobines ainda a têm. Havendo mistura, manda a bobine e a conta vai ao lado. */
+const todasNaCaixa = bs => bs.length > 0 && bs.every(temCaixa);
+const BOBINA_MINI = `<svg viewBox="0 0 48 48" width="13" height="13" style="vertical-align:-2px"
+  fill="none" stroke="currentColor" stroke-width="3.4" aria-hidden="true">
+  <circle cx="24" cy="24" r="19"/><circle cx="24" cy="24" r="6.5"/></svg>`;
+const CAIXA_MINI = `<svg viewBox="0 0 48 48" width="13" height="13" style="vertical-align:-2px"
+  fill="none" stroke="currentColor" stroke-width="3.4" aria-hidden="true">
+  <path d="M8 18 h32 v20 a3 3 0 0 1 -3 3 h-26 a3 3 0 0 1 -3 -3 z" stroke-linejoin="round"/>
+  <rect x="5" y="9" width="38" height="9" rx="2"/></svg>`;
+
 const corDoFil = f => f.cor_hex || corDe(f.cor) || NEUTRA;
 /* A foto vem da NOSSA cache (/api/imagem), não da loja: assim continua a haver
    foto no dia em que a loja mexer nos ficheiros. Se mesmo assim falhar, o
    cartão troca sozinho para a bobine desenhada em vez de ficar com o ícone
    partido do browser. */
 const fotoURL = u => '/api/imagem?u=' + encodeURIComponent(u);
-function media(f, tam) {
+function media(f, tam, bs) {
+  const desenho = (todasNaCaixa(bs || vivas(f)) ? caixaSVG : bobinaSVG)(
+    corDoFil(f), tam, eTransparente(f.cor));
   if (!f.icone && f.imagem) {
-    const alt = bobinaSVG(corDoFil(f), tam, eTransparente(f.cor)).replace(/"/g, '&quot;');
+    const alt = desenho.replace(/"/g, '&quot;');
     return `<img class="foto" src="${esc(fotoURL(f.imagem))}" width="${tam}" height="${tam}"
       loading="lazy" alt="" data-alt="${alt}" onerror="this.outerHTML=this.dataset.alt">`;
   }
-  return bobinaSVG(corDoFil(f), tam, eTransparente(f.cor));
+  return desenho;
 }
 
 
@@ -658,13 +710,15 @@ function cartao(f, termos, bs) {
   const peso = f.peso_g >= 1000 ? (f.peso_g / 1000) + ' kg' : f.peso_g + ' g';
   const abertas = bs.filter(b => b.estado === 'aberto').length;
   const vazio = bs.length === 0;
+  const nCaixa = bs.filter(temCaixa).length;
   return `<div class="spool${vazio ? ' semstock' : ''}" data-fil="${f.id}">
-    ${media(f, 44)}
+    ${media(f, 44, bs)}
     <div style="min-width:0;flex:1">
       <div class="nm">${realca(nome || 'sem nome', termos)}</div>
       <div class="mt">${esc(peso)}${vazio ? '' : ' · ' + realca(locais.join(' · '), termos)}</div>
       ${vazio ? '' : `<div class="bar"><i style="width:${pct.toFixed(0)}%"></i></div>
-      <div class="mt">${Math.round(rest)} g de ${Math.round(total)} g${abertas ? ` · ${abertas} aberta${abertas > 1 ? 's' : ''}` : ''}</div>`}
+      <div class="mt">${Math.round(rest)} g de ${Math.round(total)} g${abertas ? ` · ${abertas} aberta${abertas > 1 ? 's' : ''}` : ''}${
+        nCaixa ? ` · ${CAIXA_MINI} ${nCaixa === bs.length ? 'na caixa' : nCaixa + ' na caixa'}` : ''}</div>`}
     </div>
     <div class="qty">${vazio ? '<span class="pill">sem stock</span>'
       : `<b>${bs.length}</b><div class="sub">bobine${bs.length === 1 ? '' : 's'}</div>`}</div>
@@ -787,9 +841,9 @@ async function abreFilamento(fid) {
     <div class="field" style="margin-top:10px"><label>Cor (nome)</label>
       <input id="fCor" value="${esc(f.cor || '')}" placeholder="ex.: Ocean Blue, wood ash, silk red"></div>
     ${pickerHTML('det', f.cor_hex || '')}
-    ${f.imagem ? `<label class="row" style="margin-top:10px;font-size:12.5px;cursor:pointer">
-      <input type="checkbox" id="fIcone" ${f.icone ? 'checked' : ''} style="width:auto;min-height:auto">
-      desenhar a bobine em vez de usar a foto da loja</label>` : ''}
+    ${f.imagem ? `<div class="row" style="margin-top:10px">
+      <label class="tog" id="fIconeTog"><input type="checkbox" id="fIcone" ${f.icone ? 'checked' : ''}>
+      ${BOBINA_MINI} desenhar em vez da foto</label></div>` : ''}
     ${precos.length ? `<h3>Melhor preço por loja</h3>${precos.map(p =>
       `<div class="mv"><span class="loja${INV.lojas[p.loja]?.pais === 'PT' ? ' pt' : ''}">${esc(INV.lojas[p.loja]?.nome || p.loja)}</span>
        <b>${eur(p.preco)}</b><span class="why">${p.preco_kg ? eur(p.preco_kg) + '/kg' : ''}</span>
@@ -808,6 +862,8 @@ async function abreFilamento(fid) {
       <div class="row" style="margin-top:8px;gap:6px">
         ${[['cheia',1],['¾',.75],['½',.5],['¼',.25],['vazia',0]].map(([t, fr]) =>
           `<span class="chip" data-frac="${fr}">${t}</span>`).join('')}
+        <label class="tog${+b.caixa ? ' on' : ''}" data-caixa>
+          <input type="checkbox" data-k="caixa" ${+b.caixa ? 'checked' : ''}>${CAIXA_MINI} caixa</label>
         <span class="sub" data-pct></span>
         <span class="sub" style="margin-left:auto">${b.preco ? 'pago ' + eur(b.preco) : 'sem preço'}</span>
         <button class="ghost danger" data-del="${b.id}">apagar</button>
@@ -825,16 +881,23 @@ async function abreFilamento(fid) {
   const desenhaDet = () => {
     const nome = dlg.querySelector('#fCor').value;
     const c = hexDet || corDe(nome) || NEUTRA;
+    const marcadas = [...dlg.querySelectorAll('[data-k="caixa"]')];
+    const naCaixa = marcadas.length > 0 && marcadas.every(x => x.checked);
     const usaFoto = f.imagem && !(dlg.querySelector('#fIcone') || {}).checked;
     prevDet.innerHTML = (f.imagem ? `<img class="foto" src="${esc(fotoURL(f.imagem))}" width="46" height="46"
         alt="" style="opacity:${usaFoto ? 1 : .35}">` : '')
-      + bobinaSVG(c, 46, eTransparente(nome))
+      + (naCaixa ? caixaSVG : bobinaSVG)(c, 46, eTransparente(nome))
       + `<div class="sub">${hexDet ? 'cor escolhida' : (corDe(nome) ? 'cor lida do nome' : 'sem cor reconhecida')}
          <br>${esc(c)}${f.imagem ? (usaFoto ? ' · mostra a foto' : ' · mostra o desenho') : ''}</div>`;
   };
   const leHexDet = ligaPicker(dlg, 'det', v => { hexDet = v; desenhaDet(); });
   dlg.querySelector('#fCor').addEventListener('input', desenhaDet);
-  if (dlg.querySelector('#fIcone')) dlg.querySelector('#fIcone').onchange = desenhaDet;
+  const togIcone = dlg.querySelector('#fIcone');
+  if (togIcone) togIcone.onchange = () => {
+    dlg.querySelector('#fIconeTog').classList.toggle('on', togIcone.checked);
+    desenhaDet();
+  };
+  if (togIcone) dlg.querySelector('#fIconeTog').classList.toggle('on', togIcone.checked);
   desenhaDet();
   /* O "restante" é sempre relativo AO QUE ESTA BOBINE LEVA: numa de 250 g, meia
      bobine são 125 g e o máximo são 250. Os atalhos e a percentagem saem do
@@ -865,6 +928,11 @@ async function abreFilamento(fid) {
     c.querySelectorAll('[data-frac]').forEach(bt => bt.onclick = () => {
       rest.value = Math.round(peso() * +bt.dataset.frac); segueOPeso(); refresca();
     });
+    const cx = c.querySelector('[data-k="caixa"]');
+    if (cx) cx.onchange = () => {
+      c.querySelector('[data-caixa]').classList.toggle('on', cx.checked);
+      desenhaDet();                                  // a miniatura do topo segue
+    };
     campoPeso.oninput = () => { refresca(); segueOPeso(); };
     rest.oninput = () => { refresca(); segueOPeso(); };
     estado.onchange = () => {                       // selar enche, esvaziar zera
@@ -905,7 +973,8 @@ async function abreFilamento(fid) {
     for (const c of dlg.querySelectorAll('[data-b]')) {
       const corpo = {};
       c.querySelectorAll('[data-k]').forEach(i => {
-        corpo[i.dataset.k] = i.type === 'number' ? (+i.value || 0)
+        corpo[i.dataset.k] = i.type === 'checkbox' ? (i.checked ? 1 : 0)
+                           : i.type === 'number' ? (+i.value || 0)
                            : (i.dataset.k === 'local_id' ? +i.value : i.value);
       });
       await api('/api/bobines/' + c.dataset.b, {method: 'PATCH', body: JSON.stringify(corpo)});
@@ -1000,8 +1069,13 @@ async function adicionaDeLoja(p) {
       <div class="field"><label>Peso (g)</label><input id="xPeso" type="number" value="${p.peso_g || 1000}"></div>
       <div class="field"><label>Preço pago (€)</label><input id="xPreco" type="number" step="0.01" value="${p.preco ?? ''}"></div>
       <div class="field"><label>Quantas</label><input id="xQtd" type="number" value="1" min="1"></div>
+      <div class="field" id="xRestWrap"><label>Restante (g)</label>
+        <input id="xRest" type="number" min="0" step="10" value="${p.peso_g || 1000}"></div>
       <div class="field"><label>Onde fica</label><select id="xLocal">${
         INV.locais.map(l => `<option value="${l.id}">${esc(caminhoLocal(l.id))}</option>`).join('')}</select></div>
+      <div class="field"><label>Embalagem</label>
+        <label class="tog on" id="xCaixaChip" style="align-self:flex-start">
+          <input type="checkbox" id="xCaixa" checked>${CAIXA_MINI} vem na caixa</label></div>
     </div>
     <div class="field" style="margin-top:12px"><label>Bobine — cor</label>
       <div class="previa" id="xPrev"></div>
@@ -1026,6 +1100,18 @@ async function adicionaDeLoja(p) {
          <br>${esc(c)}${p.imagem ? ' · a loja tem foto' : ''}</div>`;
   };
   const leHex = ligaPicker(dlg, 'add', v => { hexEscolhido = v; desenha(); });
+  dlg.querySelector('#xCaixa').onchange = e =>
+    dlg.querySelector('#xCaixaChip').classList.toggle('on', e.target.checked);
+  /* Com UMA bobine dá para dizer já quanto resta e despachar a catalogação sem
+     abrir o detalhe. Com várias esconde-se: não se sabe qual delas é qual. */
+  const qtd = dlg.querySelector('#xQtd'), rest = dlg.querySelector('#xRest');
+  const peso = dlg.querySelector('#xPeso');
+  const cheio = () => { rest.max = +peso.value || ''; if (+rest.value > +peso.value) rest.value = peso.value; };
+  const soUma = () => { dlg.querySelector('#xRestWrap').hidden = +qtd.value !== 1; };
+  qtd.oninput = soUma;
+  peso.addEventListener('input', () => { if (rest.value === '' || +rest.value === 0) rest.value = peso.value; cheio(); });
+  rest.oninput = cheio;
+  soUma(); cheio();
   dlg.querySelector('#xCor').addEventListener('input', desenha);
   desenha();
   dlg.querySelector('#xOk').onclick = async () => {
@@ -1036,6 +1122,9 @@ async function adicionaDeLoja(p) {
                     cor_hex: leHex(), peso_g: +v('#xPeso') || 1000,
                     url: p.url, imagem: p.imagem, loja: p.loja, ref: p.ref || '', seguir: 1},
         bobine: {local_id: +v('#xLocal') || null, preco: +v('#xPreco') || 0,
+                 caixa: dlg.querySelector('#xCaixa').checked ? 1 : 0,
+                 // só faz sentido com uma bobine: a várias, não se sabe qual é qual
+                 ...(+v('#xQtd') === 1 ? {restante_g: +v('#xRest') || 0} : {}),
                  comprado_loja: p.loja, comprado_url: p.url, estado: 'selado',
                  comprado_em: new Date().toISOString().slice(0, 10)},
         quantidade: +v('#xQtd') || 1,
@@ -1266,6 +1355,16 @@ function montaPickerManual() {
          <br>${esc(c)}</div>`;
   };
   mHex = ligaPicker(document, 'man', v => { escolhido = v; desenha(); });
+  $('#mCaixaChip').querySelector('.cxglifo').innerHTML = CAIXA_MINI;
+  $('#mCaixa').onchange = e => $('#mCaixaChip').classList.toggle('on', e.target.checked);
+  /* mesma ideia do diálogo da loja: com uma só bobine diz-se já quanto resta */
+  const soUmaM = () => { $('#mRestWrap').hidden = +$('#mQtd').value !== 1; };
+  const cheioM = () => { const pz = +$('#mPeso').value || 0;
+    $('#mRest').max = pz || ''; if (+$('#mRest').value > pz) $('#mRest').value = pz; };
+  $('#mQtd').oninput = soUmaM;
+  $('#mPeso').oninput = () => { if (!+$('#mRest').value) $('#mRest').value = $('#mPeso').value; cheioM(); };
+  $('#mRest').oninput = cheioM;
+  soUmaM(); cheioM();
   $('#mCor').addEventListener('input', desenha);
   desenha();
 }
@@ -1355,10 +1454,13 @@ $('#mAdd').onclick = async () => {
       filamento: {marca: v('#mMarca'), material: v('#mMat'), cor: v('#mCor'), cor_hex: mHex(),
                   peso_g: +v('#mPeso') || 1000, seguir: 1},
       bobine: {local_id: +v('#mLocal') || null, preco: +v('#mPreco') || 0, estado: v('#mEstado'),
+               caixa: $('#mCaixa').checked ? 1 : 0,
+               ...(+v('#mQtd') === 1 ? {restante_g: +v('#mRest') || 0} : {}),
                comprado_em: new Date().toISOString().slice(0, 10)},
       quantidade: +v('#mQtd') || 1,
     })});
     ['#mMarca', '#mMat', '#mCor', '#mPreco'].forEach(i => $(i).value = '');
+    $('#mRest').value = $('#mPeso').value;
     await carrega(); toast('adicionado');
   } catch (e) { toast(e.message); }
 };
