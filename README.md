@@ -68,9 +68,13 @@ lá dentro, e o servidor recusa na mesma — um anel de locais fazia o caminho a
 **Preview** não escreve nada, o **Apply** aplica e guarda a reversão para se
 poder **anular**. Claude, GPT, Gemini ou DeepSeek, à escolha em Definições.
 
-**Ponte para o Fatia.** O Fatia importa daqui os filamentos com o custo real por
-quilo, calculado pelo que foi mesmo pago. Não há nada a configurar: as duas apps
-correm nesta máquina e falam por um segredo em `~/.local/share/bobina/bridge.token`.
+**Ponte para o Fatia.** O [Fatia](https://github.com/hubertdungen/fatia) escolhe os
+filamentos daqui **em direto**, sem importar nada: `/api/fatia/filamentos` devolve, por
+filamento, o custo real por quilo (do que foi mesmo pago), o melhor preço visto nas lojas,
+quanto material ainda há em casa, em que locais está, e a **cor já resolvida em hex** —
+`lexicon.cor_hex()` é o mesmo algoritmo que o browser corre em `corDe()`, para a bobine
+desenhada sair igual nas duas apps. Não há nada a configurar: as duas apps correm nesta
+máquina e falam por um segredo em `~/.local/share/bobina/bridge.token`.
 
 ## Ficheiros
 

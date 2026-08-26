@@ -30,7 +30,7 @@ import lexicon
 import lojas
 
 ROOT = Path(__file__).resolve().parent
-VERSAO = "1.8.0"
+VERSAO = "1.9.0"
 SESSION_COOKIE = "bobina_session"
 SESSION_DIAS = int(os.environ.get("BOBINA_SESSION_DAYS", "30"))
 MAX_BODY = int(os.environ.get("BOBINA_MAX_BODY", "2097152"))
@@ -458,38 +458,113 @@ def dono() -> dict | None:
     return linha("SELECT id,email FROM users ORDER BY id LIMIT 1")
 
 
-def filamentos_para_fatia(uid: int) -> list[dict]:
-    """O Fatia quer {n, kg, portes}: nome, custo real por quilo, portes.
+def _caminho_local(lid, locais: dict) -> str:
+    """Oficina > Estante A: o Fatia mostra onde está a bobine sem ter de
+    conhecer a árvore de locais. A trava do `visto` é contra um anel que tenha
+    escapado ao `valida_pai()` -- aqui um ciclo era um while sem fim."""
+    nomes, visto = [], set()
+    while lid and lid in locais and lid not in visto:
+        visto.add(lid)
+        nomes.append(locais[lid]["nome"])
+        lid = locais[lid]["pai_id"]
+    return " › ".join(reversed(nomes))
 
-    O custo por quilo sai do que foi realmente pago pelas bobines que ainda cá
-    estão (média ponderada pelo peso). Sem compras registadas, cai para o melhor
-    preço observado nas lojas; sem isso, fica a zero e o Fatia pede o número."""
+
+def filamentos_para_fatia(uid: int) -> list[dict]:
+    """Tudo o que o Fatia precisa para escolher um filamento sem sair de lá.
+
+    O Fatia é uma calculadora de preços, não um inventário: daqui vai-lhe o
+    número que ele não tem como saber -- o custo REAL por quilo, do que foi
+    mesmo pago pelas bobines que ainda cá estão (média ponderada pelo peso) --
+    e mais o que serve para o escolher com os olhos e para avisar quando o
+    trabalho não cabe no que há em casa. Sem compras registadas, o custo cai
+    para o melhor preço visto nas lojas; sem isso fica a zero e o Fatia pede o
+    número.
+
+    Duas decisões que não são óbvias:
+    - a **cor vai resolvida em hex** (`lexicon.cor_hex`), porque do lado do
+      Fatia não há léxico nenhum e a bobine desenhada lá tem de sair da mesma
+      cor que sai aqui;
+    - vai `origem_preco`, porque um €/kg do histórico das lojas e um €/kg do
+      que se pagou não valem o mesmo num orçamento, e quem lê tem de o saber.
+    """
+    locais = {r["id"]: r for r in
+              linhas("SELECT id,nome,pai_id FROM locais WHERE user_id=?", (uid,))}
     saida = []
     for f in linhas("SELECT * FROM filamentos WHERE user_id=? ORDER BY marca,material,cor",
                     (uid,)):
         bs = linhas("SELECT * FROM bobines WHERE filamento_id=? AND user_id=?"
                     " AND estado!='arquivado'", (f["id"], uid))
+        vivas = [b for b in bs if b["estado"] != "vazio"]
         pago = sum((b["preco"] or 0) for b in bs if (b["preco"] or 0) > 0)
         kg = sum((b["peso_liquido_g"] or 0) for b in bs if (b["preco"] or 0) > 0) / 1000.0
         custo_kg = round(pago / kg, 2) if kg > 0 else 0.0
-        if not custo_kg:
-            m = linha("SELECT MIN(preco_kg) k FROM precos WHERE filamento_id=?"
-                      " AND preco_kg>0 AND visto_em>?", (f["id"], agora() - 90 * 86400))
-            custo_kg = round(m["k"], 2) if m and m["k"] else 0.0
+        origem = "compras" if custo_kg else ""
+        # melhor preço visto nas lojas nos últimos 90 dias: serve de recurso
+        # quando não há compras, e de referência mesmo quando há
+        loja = linha("SELECT preco_kg,loja,url,visto_em FROM precos WHERE filamento_id=?"
+                     " AND preco_kg>0 AND visto_em>? ORDER BY preco_kg LIMIT 1",
+                     (f["id"], agora() - 90 * 86400))
+        if not custo_kg and loja:
+            custo_kg = round(loja["preco_kg"], 2)
+            origem = "lojas"
+        compra = linha("SELECT comprado_em,comprado_loja FROM bobines WHERE filamento_id=?"
+                       " AND user_id=? AND comprado_em!='' ORDER BY comprado_em DESC LIMIT 1",
+                       (f["id"], uid))
         nome = " ".join(x for x in [f["marca"], f["material"], f["cor"]] if x).strip()
+        peso = float(f["peso_g"] or 1000)
+        sitios = []
+        for b in vivas:
+            c = _caminho_local(b["local_id"], locais)
+            if c and c not in sitios:
+                sitios.append(c)
         saida.append({
+            "id": f["id"],
             "n": nome or f"filamento #{f['id']}",
-            "kg": custo_kg,
-            "portes": 0,
+            "marca": f["marca"],
             "material": f["material"],
             "cor": f["cor"],
-            "cor_hex": f["cor_hex"],
-            "marca": f["marca"],
-            "restante_g": round(sum((b["restante_g"] or 0) for b in bs
-                                    if b["estado"] != "vazio"), 1),
-            "bobines": len([b for b in bs if b["estado"] != "vazio"]),
+            "cor_hex": f["cor_hex"] or (lexicon.cor_hex(f["cor"]) or ""),
+            "cor_escolhida": bool(f["cor_hex"]),
+            # o Fatia desenha a bobine translúcida quando o filamento é
+            # transparente, tal como a app faz
+            "transparente": bool(lexicon.e_transparente(f["cor"])),
+            "kg": custo_kg,
+            "portes": 0,
+            "origem_preco": origem,
+            "preco_loja_kg": round(loja["preco_kg"], 2) if loja else 0.0,
+            "loja": (loja["loja"] if loja else "") or "",
+            "url": (loja["url"] if loja else "") or f["url"] or "",
+            "diametro": float(f["diametro"] or 1.75),
+            "peso_g": peso,
+            "densidade": float(f["densidade"] or 0),
+            "temp_bico": int(f["temp_bico"] or 0),
+            "temp_mesa": int(f["temp_mesa"] or 0),
+            "restante_g": round(sum((b["restante_g"] or 0) for b in vivas), 1),
+            "capacidade_g": round(sum((b["peso_liquido_g"] or peso) for b in vivas), 1),
+            "bobines": len(vivas),
+            "selados": len([b for b in vivas if b["estado"] == "selado"]),
+            "abertos": len([b for b in vivas if b["estado"] == "aberto"]),
+            "vazios": len([b for b in bs if b["estado"] == "vazio"]),
+            "caixa": len([b for b in vivas if int(b["caixa"] or 0)]),
+            "locais": sitios,
+            "comprado_em": (compra["comprado_em"] if compra else "") or "",
+            "comprado_loja": (compra["comprado_loja"] if compra else "") or "",
+            "etiquetas": f["etiquetas"] or "",
         })
     return saida
+
+
+def resumo_para_fatia(fils: list[dict]) -> dict:
+    """O cabeçalho do seletor do Fatia: quantos filamentos, quantas bobines e
+    quanto material há em casa. Vai feito daqui para os dois lados dizerem o
+    mesmo número."""
+    return {
+        "filamentos": len(fils),
+        "com_stock": len([f for f in fils if f["bobines"]]),
+        "bobines": sum(f["bobines"] for f in fils),
+        "total_g": round(sum(f["restante_g"] for f in fils), 1),
+    }
 
 
 # ------------------------------------------------------------ preferências --
@@ -709,8 +784,9 @@ class Handler(SimpleHTTPRequestHandler):
             d = dono()
             if not d:
                 return self.json({"filamentos": []})
-            return self.json({"filamentos": filamentos_para_fatia(d["id"]),
-                              "fonte": "bobina", "versao": VERSAO})
+            fils = filamentos_para_fatia(d["id"])
+            return self.json({"filamentos": fils, "resumo": resumo_para_fatia(fils),
+                              "fonte": "bobina", "versao": VERSAO, "em": agora()})
 
         if caminho == "/api/auth/me":
             us = self.sessao()
