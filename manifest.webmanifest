@@ -1,0 +1,10 @@
+{
+  "name": "Bobina — logística de filamento 3D",
+  "short_name": "Bobina",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0f14",
+  "theme_color": "#0b0f14",
+  "lang": "pt-PT",
+  "description": "Inventário de filamento: o que tenho, onde está, quanto resta e quanto custa em cada loja."
+}

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256" role="img" aria-label="Bobina">
+  <title>Bobina</title>
+  <defs>
+    <linearGradient id="bgr" x1="8" y1="56" x2="56" y2="8" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6d3bf5"/>
+      <stop offset="0.55" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#f0abfc"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="30" fill="#0b0f14"/>
+  <circle cx="32" cy="32" r="29" fill="none" stroke="url(#bgr)" stroke-width="2" opacity="0.55"/>
+  <!-- filamento enrolado: anel quase fechado, com a folga por onde o fio sai -->
+  <circle cx="32" cy="32" r="18" fill="none" stroke="url(#bgr)" stroke-width="9" opacity="0.22"/>
+  <path d="M47.6 41 A18 18 0 1 1 47.6 23" fill="none" stroke="url(#bgr)"
+        stroke-width="9" stroke-linecap="round"/>
+  <!-- ponta do fio a sair para a impressora -->
+  <path d="M47.6 23 C 55 21, 58 29, 53 33" fill="none" stroke="url(#bgr)"
+        stroke-width="3.4" stroke-linecap="round"/>
+  <!-- núcleo da bobine -->
+  <circle cx="32" cy="32" r="6.6" fill="#0b0f14"/>
+  <circle cx="32" cy="32" r="6.6" fill="none" stroke="url(#bgr)" stroke-width="2.6"/>
+</svg>

@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bobina — logística de filamento 3D</title>
+<meta name="description" content="Inventário de filamento: o que tenho, onde está, quanto resta e quanto custa em cada loja.">
+<meta name="theme-color" content="#0b0f14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bobina">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='8' y1='56' x2='56' y2='8' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0' stop-color='%236d3bf5'/%3E%3Cstop offset='0.55' stop-color='%23a78bfa'/%3E%3Cstop offset='1' stop-color='%23f0abfc'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='%230b0f14'/%3E%3Ccircle cx='32' cy='32' r='29' fill='none' stroke='url(%23g)' stroke-width='2' opacity='0.55'/%3E%3Ccircle cx='32' cy='32' r='18' fill='none' stroke='url(%23g)' stroke-width='9' opacity='0.22'/%3E%3Cpath d='M47.6 41 A18 18 0 1 1 47.6 23' fill='none' stroke='url(%23g)' stroke-width='9' stroke-linecap='round'/%3E%3Cpath d='M47.6 23 C 55 21, 58 29, 53 33' fill='none' stroke='url(%23g)' stroke-width='3.4' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='32' r='6.6' fill='%230b0f14'/%3E%3Ccircle cx='32' cy='32' r='6.6' fill='none' stroke='url(%23g)' stroke-width='2.6'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#0b0f14; --panel:#131922; --panel2:#1a2230; --line:#263040;
+  --txt:#e8eef5; --dim:#8996a6; --accent:#a78bfa; --accent2:#f0abfc; --deep:#6d3bf5;
+  --good:#3ecf8e; --bad:#ff6b6b; --warn:#f5b942; --blue:#5aa9ff;
+  --r:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);
+  font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+  padding-bottom:78px}
+.wrap{max-width:1200px;margin:0 auto;padding:18px 18px 8px}
+a{color:var(--blue)}
+button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+  padding:9px 14px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;
+  transition:.15s;min-height:38px;font-family:inherit}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);color:#160b33;border-color:var(--accent)}
+button.primary:hover{background:var(--accent2)}
+button.danger{color:var(--bad)}
+button.ghost{background:transparent;border-color:transparent;padding:6px 8px}
+button:disabled{opacity:.45;cursor:default}
+input,select,textarea{background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+  padding:8px 10px;border-radius:9px;font-size:14px;font-family:inherit;min-height:38px;width:100%}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+textarea{min-height:78px;resize:vertical}
+label{font-size:11.5px;color:var(--dim);display:block;margin-bottom:4px;letter-spacing:.2px}
+.field{display:flex;flex-direction:column;gap:2px}
+[hidden]{display:none !important}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.grid{display:grid;gap:12px}
+.grid.c2{grid-template-columns:repeat(2,1fr)}
+.grid.c3{grid-template-columns:repeat(3,1fr)}
+.grid.c4{grid-template-columns:repeat(4,1fr)}
+@media (max-width:900px){.grid.c3,.grid.c4{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:560px){.grid.c2,.grid.c3,.grid.c4{grid-template-columns:1fr}.wrap{padding:12px 12px 8px}}
+h1{font-size:24px;margin:0;letter-spacing:-.6px;font-weight:800}
+h2{font-size:16px;margin:0 0 12px;font-weight:700}
+h3{font-size:13px;margin:0 0 8px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.4px}
+.sub{color:var(--dim);font-size:12.5px}
+header.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px}
+.brand svg{width:36px;height:36px;flex:none}
+.tabs{display:flex;gap:6px;position:fixed;bottom:0;left:0;right:0;background:var(--panel);
+  border-top:1px solid var(--line);padding:8px;justify-content:space-around;z-index:20}
+.tabs button{flex:1;background:transparent;border:none;color:var(--dim);font-size:11.5px;
+  display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;min-height:auto}
+.tabs button.active{color:var(--accent)}
+.tabs button svg{width:20px;height:20px}
+.tabsec{display:none}
+.tabsec.active{display:block}
+.pill{display:inline-flex;align-items:center;gap:5px;background:var(--panel2);border:1px solid var(--line);
+  border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600}
+.pill.good{color:var(--good);border-color:rgba(62,207,142,.4)}
+.pill.bad{color:var(--bad);border-color:rgba(255,107,107,.4)}
+.pill.warn{color:var(--warn);border-color:rgba(245,185,66,.4)}
+
+/* ---- pesquisa: a caixa é o centro da app, por isso é grande e fica colada ao topo ---- */
+.searchbar{position:sticky;top:0;z-index:15;background:linear-gradient(var(--bg) 70%,transparent);
+  padding:6px 0 12px;margin-bottom:4px}
+.searchbox{position:relative}
+.searchbox input{font-size:17px;min-height:52px;padding:10px 96px 10px 44px;border-radius:13px;
+  background:var(--panel);border-color:var(--line)}
+.searchbox .mag{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:20px;height:20px;
+  color:var(--dim);pointer-events:none}
+.searchbox .cnt{position:absolute;right:44px;top:50%;transform:translateY(-50%);font-size:12px;
+  color:var(--dim);font-variant-numeric:tabular-nums;pointer-events:none}
+.searchbox .clr{position:absolute;right:8px;top:50%;transform:translateY(-50%);min-height:30px;
+  padding:4px 9px;border-radius:8px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.chip{font-size:11.5px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);
+  background:var(--panel2);color:var(--dim);cursor:pointer}
+.chip:hover{border-color:var(--accent);color:var(--txt)}
+.chip.on{background:var(--accent);color:#160b33;border-color:var(--accent)}
+.termo{background:rgba(167,139,250,.22);border-radius:4px;padding:0 2px}
+
+/* ---- cartões de bobine ---- */
+.spools{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.spool{display:flex;gap:12px;align-items:flex-start;background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--r);padding:12px;cursor:pointer;transition:.15s}
+.spool:hover{border-color:var(--accent)}
+.swatch{width:42px;height:42px;border-radius:11px;flex:none;border:1px solid rgba(255,255,255,.16);
+  position:relative;overflow:hidden}
+.swatch::after{content:"";position:absolute;inset:32% 32%;border-radius:50%;
+  background:var(--panel);border:1px solid rgba(0,0,0,.35)}
+.spool .nm{font-weight:700;font-size:14px;line-height:1.3}
+.spool .mt{font-size:12px;color:var(--dim);margin-top:3px}
+.bar{height:5px;border-radius:3px;background:var(--panel2);margin-top:7px;overflow:hidden}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--deep),var(--accent2))}
+.qty{margin-left:auto;text-align:right;flex:none}
+.qty b{font-size:17px;font-variant-numeric:tabular-nums}
+.empty{text-align:center;color:var(--dim);padding:38px 16px;font-size:14px}
+
+/* ---- resultados de loja ---- */
+.hit{display:flex;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);
+  border-radius:12px;padding:10px;margin-bottom:8px}
+.hit img{width:56px;height:56px;object-fit:contain;border-radius:8px;background:#fff;flex:none}
+.hit .t{font-size:13px;font-weight:600;line-height:1.32}
+.hit .p{font-size:12px;color:var(--dim);margin-top:3px}
+.hit .eur{font-size:16px;font-weight:800;white-space:nowrap}
+.loja{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--panel2);
+  border:1px solid var(--line);color:var(--dim);letter-spacing:.3px}
+.loja.pt{color:var(--good);border-color:rgba(62,207,142,.4)}
+
+/* ---- agente ---- */
+.plan{border-left:3px solid var(--accent);padding-left:12px;margin:10px 0}
+.mv{display:flex;gap:8px;align-items:baseline;font-size:13px;padding:5px 0;border-bottom:1px solid var(--line)}
+.mv .arw{color:var(--accent);font-weight:700}
+.mv .why{color:var(--dim);font-size:12px}
+.spark{display:flex;align-items:flex-end;gap:2px;height:34px}
+.spark i{flex:1;background:var(--accent);opacity:.65;border-radius:2px 2px 0 0;min-height:2px}
+
+/* ---- assinatura DL X (igual à do Fatia) ---- */
+footer{margin:26px 0 10px;text-align:center;color:var(--dim);font-size:12px}
+.dlxsig{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px}
+.dlxsig .pw{font-size:10.5px;letter-spacing:1.6px;text-transform:uppercase;opacity:.55}
+.dlxmark{height:26px;width:auto;color:var(--txt);opacity:.92}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:88px;background:var(--panel2);
+  border:1px solid var(--accent);border-radius:10px;padding:10px 16px;font-size:13px;z-index:60;
+  box-shadow:0 8px 28px rgba(0,0,0,.5);max-width:90vw}
+dialog{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:var(--r);
+  padding:0;max-width:560px;width:94vw}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+.dlg{padding:18px}
+.dlg h2{margin-bottom:14px}
+</style>
+</head>
+<body>
+
+<!-- marca DL X: o "D/L" toma a cor do texto, o "X" fica coral da identidade -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="dlxmark" viewBox="275 385 742 510">
+    <path fill="#ec826c" d="M1006.26,832.53h-79.87s-40.39-41.13-40.39-41.13l-44.71-45.96-28.35,29.11-66.72,68.41-30.51,30.66-.21-101.85-39.92-.14c-.51-3.83-.69-7.22.03-10.23l44.31-45.3,37.57-38.47c3.49-3.57,6.83-6.55,10.03-10.83l-59.03-60.39-33.32-33.94.07-66.07h87.27s21.41,22.01,21.41,22.01l8.67,9.12,48.62,50.94,18.68-19.82,29.72-31.01,30.09-31.21,86.56-.04-.02,66.51-54.67,56.19-37.06,37.92c4.04,4.73,7.83,8.65,12,12.88l26.85,27.24,48.17,48.95,4.71,5.05.04,71.4Z"/>
+    <path fill="currentColor" d="M426.43,394.71h-140.66v375.51h235.5v-268.41l-94.85-107.11ZM426.43,675.37h-45.81v-185.82h45.81v185.82Z"/>
+    <polygon fill="#ec826c" points="521.28 788.93 521.28 596.66 426.43 489.55 426.43 788.93 426.43 883.78 521.28 883.78 699.36 883.78 699.36 788.93 521.28 788.93"/>
+  </symbol>
+  <symbol id="logo" viewBox="0 0 64 64">
+    <defs><linearGradient id="bg1" x1="8" y1="56" x2="56" y2="8" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6d3bf5"/><stop offset="0.55" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#f0abfc"/></linearGradient></defs>
+    <circle cx="32" cy="32" r="30" fill="#0b0f14"/>
+    <circle cx="32" cy="32" r="29" fill="none" stroke="url(#bg1)" stroke-width="2" opacity="0.55"/>
+    <circle cx="32" cy="32" r="18" fill="none" stroke="url(#bg1)" stroke-width="9" opacity="0.22"/>
+    <path d="M47.6 41 A18 18 0 1 1 47.6 23" fill="none" stroke="url(#bg1)" stroke-width="9" stroke-linecap="round"/>
+    <path d="M47.6 23 C 55 21, 58 29, 53 33" fill="none" stroke="url(#bg1)" stroke-width="3.4" stroke-linecap="round"/>
+    <circle cx="32" cy="32" r="6.6" fill="#0b0f14"/>
+    <circle cx="32" cy="32" r="6.6" fill="none" stroke="url(#bg1)" stroke-width="2.6"/>
+  </symbol>
+</svg>
+
+<div class="wrap">
+
+<!-- ===================== entrada ===================== -->
+<section id="gate" hidden>
+  <header class="top"><div class="brand"><svg><use href="#logo"/></svg><div>
+    <h1>Bobina</h1><div class="sub">logística de filamento 3D</div></div></div></header>
+  <div class="card" style="max-width:420px;margin:40px auto">
+    <h2 id="gateTitle">Entrar</h2>
+    <div class="grid" style="gap:10px">
+      <div class="field"><label>Email</label><input id="gEmail" type="email" autocomplete="username"></div>
+      <div class="field"><label>Palavra-passe</label><input id="gPass" type="password" autocomplete="current-password"></div>
+      <div id="gErr" class="sub" style="color:var(--bad)"></div>
+      <button class="primary" id="gGo">Entrar</button>
+      <div class="sub" id="gHint"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== app ===================== -->
+<section id="app" hidden>
+<header class="top">
+  <div class="brand"><svg><use href="#logo"/></svg><div>
+    <h1>Bobina</h1><div class="sub" id="resumoTopo">—</div></div></div>
+  <div class="row"><button class="ghost" id="btnSair">sair</button></div>
+</header>
+
+<!-- ---------- pesquisa ---------- -->
+<div class="tabsec active" id="tab-buscar">
+  <div class="searchbar">
+    <div class="searchbox">
+      <svg class="mag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="q" placeholder="ASA Azure preto…  (escreve, não é preciso Enter)"
+             autocomplete="off" autocapitalize="off" spellcheck="false">
+      <span class="cnt" id="qCnt"></span>
+      <button class="clr" id="qClr" hidden>✕</button>
+    </div>
+    <div class="chips" id="qChips"></div>
+  </div>
+  <div class="spools" id="lista"></div>
+  <div class="empty" id="vazio" hidden></div>
+</div>
+
+<!-- ---------- adicionar ---------- -->
+<div class="tabsec" id="tab-add">
+  <div class="card" style="margin-bottom:12px">
+    <h2>Procurar nas lojas</h2>
+    <div class="sub" style="margin-bottom:10px">Evolt e Core XY (PT), QIDI EU, Elegoo EU e Amazon.
+      Escreve em português ou inglês — a pesquisa é traduzida para cada loja.</div>
+    <div class="searchbox">
+      <svg class="mag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="sq" placeholder="ex.: PETG preto 1kg" autocomplete="off">
+      <span class="cnt" id="sqCnt"></span>
+    </div>
+    <div class="chips" id="sqLojas" style="margin-top:10px"></div>
+  </div>
+  <div id="hits"></div>
+  <div class="card" style="margin-top:12px">
+    <h2>…ou à mão</h2>
+    <div class="grid c3">
+      <div class="field"><label>Marca</label><input id="mMarca" placeholder="AzureFilm"></div>
+      <div class="field"><label>Material</label><input id="mMat" placeholder="ASA"></div>
+      <div class="field"><label>Cor</label><input id="mCor" placeholder="Preto"></div>
+      <div class="field"><label>Peso (g)</label><input id="mPeso" type="number" value="1000"></div>
+      <div class="field"><label>Preço pago (€)</label><input id="mPreco" type="number" step="0.01"></div>
+      <div class="field"><label>Quantas bobines</label><input id="mQtd" type="number" value="1" min="1"></div>
+      <div class="field"><label>Onde fica</label><select id="mLocal"></select></div>
+      <div class="field"><label>Estado</label><select id="mEstado">
+        <option value="selado">selado</option><option value="aberto">aberto</option></select></div>
+      <div class="field"><label>Cor (amostra)</label><input id="mHex" type="color" value="#222222"></div>
+    </div>
+    <div class="row" style="margin-top:12px"><button class="primary" id="mAdd">Adicionar</button></div>
+  </div>
+</div>
+
+<!-- ---------- preços ---------- -->
+<div class="tabsec" id="tab-precos">
+  <div class="row" style="margin-bottom:12px">
+    <button class="primary" id="pRefresh">Actualizar preços agora</button>
+    <span class="sub" id="pInfo"></span>
+  </div>
+  <div id="precos"></div>
+</div>
+
+<!-- ---------- locais ---------- -->
+<div class="tabsec" id="tab-locais">
+  <div class="card" style="margin-bottom:12px">
+    <h2>Novo local</h2>
+    <div class="grid c4">
+      <div class="field"><label>Nome</label><input id="lNome" placeholder="Estante A — prateleira 2"></div>
+      <div class="field"><label>Tipo</label><select id="lTipo">
+        <option>sala</option><option>estante</option><option selected>prateleira</option>
+        <option>caixa</option><option>gaveta</option><option>impressora</option><option>outro</option></select></div>
+      <div class="field"><label>Dentro de</label><select id="lPai"></select></div>
+      <div class="field"><label>Capacidade (bobines)</label><input id="lCap" type="number" value="0" min="0"></div>
+    </div>
+    <div class="row" style="margin-top:12px"><button class="primary" id="lAdd">Criar</button></div>
+  </div>
+  <div id="locais"></div>
+</div>
+
+<!-- ---------- agente ---------- -->
+<div class="tabsec" id="tab-agente">
+  <div class="card" style="margin-bottom:12px">
+    <h2>Agente de arrumação</h2>
+    <div class="sub" style="margin-bottom:10px">Olha para o que tens e para o espaço que existe,
+      e propõe nomes de espaços e onde arrumar cada bobine. <b>O Preview não altera nada</b> —
+      só depois de veres é que podes aplicar, e podes anular a seguir.</div>
+    <div class="field" style="margin-bottom:10px"><label>O que queres (opcional)</label>
+      <textarea id="aInstr" placeholder="ex.: tenho pouco espaço; quero o que uso todos os dias à mão da impressora"></textarea></div>
+    <div class="row">
+      <button class="primary" id="aPreview">Preview</button>
+      <select id="aForn" style="width:auto;min-width:190px"></select>
+      <span class="sub" id="aInfo"></span>
+    </div>
+  </div>
+  <div id="plano"></div>
+  <div id="planos"></div>
+</div>
+
+<!-- ---------- definições ---------- -->
+<div class="tabsec" id="tab-def">
+  <div class="card" style="margin-bottom:12px">
+    <h2>Ligação ao Fatia</h2>
+    <div class="sub">O Fatia lê os filamentos daqui — marca, material, cor e o custo real por
+      quilo, calculado pelo que pagaste. Não é preciso configurar nada: as duas apps correm nesta
+      máquina e falam por um ficheiro de segredo partilhado.</div>
+    <div id="ponte" style="margin-top:10px"></div>
+  </div>
+  <div class="card" style="margin-bottom:12px">
+    <h2>Agente — chaves de API</h2>
+    <div class="sub" style="margin-bottom:10px">Escolhe quem responde. As chaves ficam nesta
+      máquina e nunca saem daqui em claro.</div>
+    <div id="chaves" class="grid" style="gap:10px"></div>
+    <div class="row" style="margin-top:12px"><button class="primary" id="dSave">Guardar</button></div>
+  </div>
+  <div class="card">
+    <h2>Os teus dados</h2>
+    <div class="row"><a href="/api/export" download><button>Exportar tudo (JSON)</button></a></div>
+  </div>
+</div>
+
+<footer>
+  <div><b style="color:var(--accent)">Bobina</b> <span id="ver"></span> · uso pessoal</div>
+  <div class="dlxsig">
+    <span class="pw">powered by</span>
+    <svg class="dlxmark" viewBox="0 0 742 510" role="img" aria-label="DL X"><use href="#dlxmark"/></svg>
+  </div>
+</footer>
+</section>
+</div>
+
+<nav class="tabs" id="navtabs" hidden>
+  <button data-tab="buscar" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>Procurar</button>
+  <button data-tab="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Adicionar</button>
+  <button data-tab="precos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 18l5-6 4 4 7-9"/></svg>Preços</button>
+  <button data-tab="locais"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v5H4zM4 14h16v5H4z"/></svg>Locais</button>
+  <button data-tab="agente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2.1 4.6 5 .6-3.7 3.4 1 5-4.4-2.5L7.6 16.6l1-5L4.9 8.2l5-.6z"/></svg>Agente</button>
+  <button data-tab="def"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Definições</button>
+</nav>
+
+<script>
+/* ============================ base ============================ */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const escRe = s => String(s).replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
+const eur = n => (n == null || isNaN(n)) ? '—' : Number(n).toFixed(2).replace('.', ',') + ' €';
+
+async function api(caminho, opcoes = {}) {
+  const r = await fetch(caminho, {
+    credentials: 'same-origin',
+    headers: opcoes.body ? {'Content-Type': 'application/json'} : {},
+    ...opcoes,
+  });
+  let d = {};
+  try { d = await r.json(); } catch (e) {}
+  if (!r.ok) throw new Error(d.erro || ('erro ' + r.status));
+  return d;
+}
+let _toast;
+function toast(msg, ms = 2600) {
+  clearTimeout(_toast);
+  let el = $('#toast');
+  if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; document.body.appendChild(el); }
+  el.textContent = msg; el.hidden = false;
+  _toast = setTimeout(() => { el.hidden = true; }, ms);
+}
+
+/* ============================ estado ============================ */
+let INV = {locais: [], filamentos: [], bobines: [], precos: {}, lojas: {}};
+let LEX = {grupos: {}, index: {}};
+let FIL = {}, LOC = {}, PORLOC = {}, HAY = {};
+let LOJAS_SEL = new Set();
+
+/* ============================ léxico ============================ */
+/* Mesma tabela que o servidor usa: em vez de duplicar sinónimos aqui, vem toda
+   de /api/lexicon. É o que faz "preto" encontrar "Black" e "azure" encontrar
+   tanto a marca AzureFilm como a cor azul. */
+function norm(s) {
+  return String(s ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/,/g, '.').replace(/[^a-z0-9+.\s-]/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+const _expCache = new Map();
+function expande(tok) {
+  if (_expCache.has(tok)) return _expCache.get(tok);
+  const out = new Set([tok]);
+  for (const h of (LEX.index[tok] || [])) {
+    out.add(norm(h.c));
+    for (const a of (LEX.grupos[h.g]?.[h.c] || [])) out.add(a);
+  }
+  const r = [...out].filter(Boolean);
+  _expCache.set(tok, r);
+  return r;
+}
+/* Um termo casa se aparecer tal como foi escrito (para quem ainda vai a meio da
+   palavra) ou se algum sinónimo seu aparecer no início de uma palavra. */
+function casaTermo(hay, t) {
+  if (hay.includes(t)) return true;
+  return expande(t).some(a => new RegExp('(?<![a-z0-9])' + escRe(a)).test(hay));
+}
+function casa(hay, termos) { return termos.every(t => casaTermo(hay, t)); }
+
+/* ============================ derivados ============================ */
+function caminhoLocal(id) {
+  const partes = [];
+  let l = LOC[id], guarda = 0;
+  while (l && guarda++ < 12) { partes.unshift(l.nome); l = LOC[l.pai_id]; }
+  return partes.join(' › ');
+}
+function reindexa() {
+  FIL = {}; LOC = {}; PORLOC = {}; HAY = {};
+  INV.locais.forEach(l => LOC[l.id] = l);
+  INV.filamentos.forEach(f => FIL[f.id] = f);
+  INV.bobines.forEach(b => (PORLOC[b.filamento_id] ||= []).push(b));
+  for (const f of INV.filamentos) {
+    const bs = PORLOC[f.id] || [];
+    const peso = f.peso_g >= 1000 ? (f.peso_g / 1000) + 'kg' : f.peso_g + 'g';
+    HAY[f.id] = norm([
+      f.marca, f.material, f.cor, f.etiquetas, f.notas, f.ref, f.loja,
+      peso, f.diametro,
+      ...bs.map(b => [b.etiqueta, b.estado, b.notas, b.comprado_loja,
+                      caminhoLocal(b.local_id)].join(' ')),
+    ].join(' '));
+  }
+}
+const vivas = f => (PORLOC[f.id] || []).filter(b => b.estado !== 'arquivado');
+const restante = f => vivas(f).reduce((a, b) => a + (b.estado === 'vazio' ? 0 : (+b.restante_g || 0)), 0);
+
+/* ============================ pesquisa ============================ */
+function termosDe(q) { return norm(q).split(' ').filter(Boolean); }
+
+function resultados(q) {
+  const termos = termosDe(q);
+  let fs = INV.filamentos;
+  if (termos.length) fs = fs.filter(f => casa(HAY[f.id] || '', termos));
+  return fs.sort((a, b) => {
+    const va = vivas(a).length, vb = vivas(b).length;
+    if (!!va !== !!vb) return vb - va;                       // o que existe primeiro
+    return (a.marca + a.material + a.cor).localeCompare(b.marca + b.material + b.cor, 'pt');
+  });
+}
+
+function realca(txt, termos) {
+  let out = esc(txt);
+  if (!termos.length) return out;
+  const alvos = [...new Set(termos.flatMap(t => [t, ...expande(t)]))]
+    .filter(a => a.length > 1).sort((a, b) => b.length - a.length);
+  for (const a of alvos.slice(0, 40)) {
+    out = out.replace(new RegExp('(?<![a-zA-Z0-9>])(' + escRe(a) + ')(?![^<]*>)', 'ig'),
+                      '<span class="termo">$1</span>');
+  }
+  return out;
+}
+
+function cartao(f, termos) {
+  const bs = vivas(f);
+  const total = bs.reduce((a, b) => a + (+b.peso_liquido_g || 0), 0);
+  const rest = restante(f);
+  const pct = total > 0 ? Math.max(0, Math.min(100, rest / total * 100)) : 0;
+  const locais = [...new Set(bs.map(b => caminhoLocal(b.local_id) || 'sem local'))];
+  const nome = [f.marca, f.material, f.cor].filter(Boolean).join(' ');
+  const peso = f.peso_g >= 1000 ? (f.peso_g / 1000) + ' kg' : f.peso_g + ' g';
+  const abertas = bs.filter(b => b.estado === 'aberto').length;
+  return `<div class="spool" data-fil="${f.id}">
+    <div class="swatch" style="background:${esc(f.cor_hex || '#333a46')}"></div>
+    <div style="min-width:0;flex:1">
+      <div class="nm">${realca(nome || 'sem nome', termos)}</div>
+      <div class="mt">${esc(peso)} · ${realca(locais.join(' · '), termos)}</div>
+      <div class="bar"><i style="width:${pct.toFixed(0)}%"></i></div>
+      <div class="mt">${Math.round(rest)} g de ${Math.round(total)} g${abertas ? ` · ${abertas} aberta${abertas > 1 ? 's' : ''}` : ''}</div>
+    </div>
+    <div class="qty"><b>${bs.length}</b><div class="sub">bobine${bs.length === 1 ? '' : 's'}</div></div>
+  </div>`;
+}
+
+function desenhaLista() {
+  const q = $('#q').value;
+  const termos = termosDe(q);
+  const fs = resultados(q);
+  $('#qCnt').textContent = q ? `${fs.length}` : '';
+  $('#qClr').hidden = !q;
+  $('#lista').innerHTML = fs.map(f => cartao(f, termos)).join('');
+  const vazio = $('#vazio');
+  vazio.hidden = fs.length > 0;
+  if (!fs.length) {
+    vazio.innerHTML = INV.filamentos.length
+      ? `Nada com <b>${esc(q)}</b>.<br><span class="sub">Experimenta menos palavras — "asa preto" chega.</span>`
+      : `Ainda não tens nada.<br><span class="sub">Vai a <b>Adicionar</b> e procura numa loja.</span>`;
+  }
+}
+
+/* chips: atalhos que escrevem na caixa, para a pesquisa continuar a ser o centro */
+const CHIPS = ['PLA', 'PETG', 'ASA', 'ABS', 'TPU', 'Nylon', 'preto', 'branco', 'aberto', 'selado'];
+function desenhaChips() {
+  const termos = termosDe($('#q').value);
+  $('#qChips').innerHTML = CHIPS.map(c =>
+    `<span class="chip${termos.includes(norm(c)) ? ' on' : ''}" data-chip="${esc(c)}">${esc(c)}</span>`).join('');
+}
+</script>
+<script>
+/* ============================ detalhe de um filamento ============================ */
+async function abreFilamento(fid) {
+  const f = FIL[fid]; if (!f) return;
+  const bs = (PORLOC[fid] || []);
+  const opts = l => INV.locais.map(x =>
+    `<option value="${x.id}"${x.id === l ? ' selected' : ''}>${esc(caminhoLocal(x.id))}</option>`).join('');
+  const precos = (INV.precos[fid] || []).sort((a, b) => (a.preco_kg || a.preco) - (b.preco_kg || b.preco));
+  const dlg = document.createElement('dialog');
+  dlg.innerHTML = `<div class="dlg">
+    <h2>${esc([f.marca, f.material, f.cor].filter(Boolean).join(' ') || 'filamento')}</h2>
+    <div class="sub" style="margin-bottom:12px">${esc(f.peso_g)} g · ⌀${esc(f.diametro)} mm${f.ref ? ' · ref ' + esc(f.ref) : ''}</div>
+    ${precos.length ? `<h3>Melhor preço por loja</h3>${precos.map(p =>
+      `<div class="mv"><span class="loja${INV.lojas[p.loja]?.pais === 'PT' ? ' pt' : ''}">${esc(INV.lojas[p.loja]?.nome || p.loja)}</span>
+       <b>${eur(p.preco)}</b><span class="why">${p.preco_kg ? eur(p.preco_kg) + '/kg' : ''}</span>
+       <a href="${esc(p.url)}" target="_blank" rel="noopener" style="margin-left:auto">ver</a></div>`).join('')}` : ''}
+    <h3 style="margin-top:14px">Bobines</h3>
+    <div id="dbs">${bs.map(b => `<div class="card" style="margin-bottom:8px" data-b="${b.id}">
+      <div class="grid c3" style="gap:8px">
+        <div class="field"><label>Onde está</label><select data-k="local_id">${opts(b.local_id)}</select></div>
+        <div class="field"><label>Estado</label><select data-k="estado">
+          ${['selado','aberto','vazio','arquivado'].map(e => `<option${e === b.estado ? ' selected' : ''}>${e}</option>`).join('')}</select></div>
+        <div class="field"><label>Restante (g)</label><input type="number" data-k="restante_g" value="${b.restante_g ?? ''}"></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <span class="sub">${b.preco ? 'pago ' + eur(b.preco) : 'sem preço'}</span>
+        <button class="ghost danger" data-del="${b.id}" style="margin-left:auto">apagar</button>
+      </div></div>`).join('') || '<div class="sub">nenhuma</div>'}</div>
+    <div class="row" style="margin-top:14px">
+      <button class="primary" id="dSalvar">Guardar</button>
+      <button id="dPrecos">Ver preços agora</button>
+      <button class="ghost" id="dFechar" style="margin-left:auto">fechar</button>
+    </div></div>`;
+  document.body.appendChild(dlg);
+  dlg.showModal();
+  const fecha = () => { dlg.close(); dlg.remove(); };
+  dlg.querySelector('#dFechar').onclick = fecha;
+  dlg.addEventListener('close', () => dlg.remove());
+  dlg.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    if (!confirm('Apagar esta bobine?')) return;
+    await api('/api/bobines/' + b.dataset.del, {method: 'DELETE'});
+    fecha(); await carrega(); toast('bobine apagada');
+  });
+  dlg.querySelector('#dSalvar').onclick = async () => {
+    for (const c of dlg.querySelectorAll('[data-b]')) {
+      const corpo = {};
+      c.querySelectorAll('[data-k]').forEach(i => {
+        corpo[i.dataset.k] = i.type === 'number' ? (+i.value || 0)
+                           : (i.dataset.k === 'local_id' ? +i.value : i.value);
+      });
+      await api('/api/bobines/' + c.dataset.b, {method: 'PATCH', body: JSON.stringify(corpo)});
+    }
+    fecha(); await carrega(); toast('guardado');
+  };
+  dlg.querySelector('#dPrecos').onclick = async () => {
+    toast('a perguntar às lojas…', 60000);
+    try {
+      const r = await api('/api/filamentos/' + fid + '/precos', {method: 'POST'});
+      toast(r.gravados ? `${r.gravados} preço(s) actualizados` : 'nenhuma loja tem este produto');
+      fecha(); await carrega();
+    } catch (e) { toast(e.message); }
+  };
+}
+
+/* ============================ lojas: procurar e adicionar ============================ */
+let sqTimer;
+function desenhaLojas() {
+  $('#sqLojas').innerHTML = Object.entries(INV.lojas).map(([k, v]) =>
+    `<span class="chip${LOJAS_SEL.has(k) ? ' on' : ''}" data-loja="${esc(k)}">${esc(v.nome)}</span>`).join('');
+}
+async function procuraLojas() {
+  const q = $('#sq').value.trim();
+  if (q.length < 2) { $('#hits').innerHTML = ''; $('#sqCnt').textContent = ''; return; }
+  $('#sqCnt').textContent = '…';
+  const lojas = [...LOJAS_SEL].join(',');
+  try {
+    const r = await api('/api/lojas/busca?q=' + encodeURIComponent(q) + (lojas ? '&lojas=' + lojas : ''));
+    $('#sqCnt').textContent = r.resultados.length;
+    const erros = Object.entries(r.erros || {});
+    $('#hits').innerHTML =
+      (erros.length ? `<div class="sub" style="margin-bottom:8px;color:var(--warn)">sem resposta de: ${erros.map(e => esc(INV.lojas[e[0]]?.nome || e[0])).join(', ')}</div>` : '') +
+      (r.resultados.length ? r.resultados.map((p, i) => `<div class="hit">
+        ${p.imagem ? `<img src="${esc(p.imagem)}" alt="" loading="lazy">` : '<div style="width:56px"></div>'}
+        <div style="min-width:0;flex:1">
+          <div class="t">${esc(p.titulo)}</div>
+          <div class="p"><span class="loja${p.pais === 'PT' ? ' pt' : ''}">${esc(p.loja_nome)}</span>
+            ${p.peso_g ? ' · ' + (p.peso_g >= 1000 ? p.peso_g / 1000 + ' kg' : p.peso_g + ' g') : ''}
+            ${p.preco_kg ? ' · ' + eur(p.preco_kg) + '/kg' : ''}
+            ${p.stock === false ? ' · <span style="color:var(--bad)">esgotado</span>' : ''}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="eur">${eur(p.preco)}</div>
+          <div class="row" style="justify-content:flex-end;margin-top:6px">
+            <a href="${esc(p.url)}" target="_blank" rel="noopener"><button class="ghost">abrir</button></a>
+            <button class="primary" data-hit="${i}">adicionar</button>
+          </div>
+        </div></div>`).join('') : '<div class="empty">Nada encontrado nessas lojas.</div>');
+    $('#hits').querySelectorAll('[data-hit]').forEach(b =>
+      b.onclick = () => adicionaDeLoja(r.resultados[+b.dataset.hit]));
+  } catch (e) { $('#sqCnt').textContent = ''; $('#hits').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
+/* Adivinha marca / material / cor a partir do título, usando o mesmo léxico.
+   Poupa a escrita à mão, e tudo fica editável antes de gravar. */
+function adivinha(titulo) {
+  const toks = norm(titulo).split(' ').filter(Boolean);
+  const achado = {marca: '', material: '', cor: ''};
+  for (const t of toks) {
+    for (const h of (LEX.index[t] || [])) {
+      if (h.g === 'marca' && !achado.marca) achado.marca = h.c;
+      if (h.g === 'material' && !achado.material) achado.material = h.c.toUpperCase();
+      if (h.g === 'cor' && !achado.cor) achado.cor = h.c;
+    }
+  }
+  return achado;
+}
+const HEX = {preto:'#141414',branco:'#f2f2f2',cinzento:'#7b828c',prateado:'#c9ccd1',dourado:'#d4af37',
+  bronze:'#8c6239',cobre:'#b45f2b',azul:'#2563eb',turquesa:'#14b8a6',verde:'#16a34a',amarelo:'#eab308',
+  laranja:'#f97316',vermelho:'#dc2626',rosa:'#ec4899',roxo:'#8b5cf6',castanho:'#6b4423',bege:'#d9c9a8',
+  transparente:'#dfe7ee',multicor:'#a78bfa'};
+
+async function adicionaDeLoja(p) {
+  const g = adivinha(p.titulo);
+  const dlg = document.createElement('dialog');
+  dlg.innerHTML = `<div class="dlg"><h2>Adicionar</h2>
+    <div class="sub" style="margin-bottom:12px">${esc(p.titulo)}</div>
+    <div class="grid c2">
+      <div class="field"><label>Marca</label><input id="xMarca" value="${esc(g.marca)}"></div>
+      <div class="field"><label>Material</label><input id="xMat" value="${esc(g.material)}"></div>
+      <div class="field"><label>Cor</label><input id="xCor" value="${esc(g.cor)}"></div>
+      <div class="field"><label>Cor (amostra)</label><input id="xHex" type="color" value="${HEX[g.cor] || '#8892a0'}"></div>
+      <div class="field"><label>Peso (g)</label><input id="xPeso" type="number" value="${p.peso_g || 1000}"></div>
+      <div class="field"><label>Preço pago (€)</label><input id="xPreco" type="number" step="0.01" value="${p.preco ?? ''}"></div>
+      <div class="field"><label>Quantas</label><input id="xQtd" type="number" value="1" min="1"></div>
+      <div class="field"><label>Onde fica</label><select id="xLocal">${
+        INV.locais.map(l => `<option value="${l.id}">${esc(caminhoLocal(l.id))}</option>`).join('')}</select></div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button class="primary" id="xOk">Adicionar ao inventário</button>
+      <button class="ghost" id="xNo" style="margin-left:auto">cancelar</button>
+    </div></div>`;
+  document.body.appendChild(dlg); dlg.showModal();
+  dlg.addEventListener('close', () => dlg.remove());
+  dlg.querySelector('#xNo').onclick = () => dlg.close();
+  dlg.querySelector('#xOk').onclick = async () => {
+    const v = id => dlg.querySelector(id).value;
+    try {
+      await api('/api/adicionar', {method: 'POST', body: JSON.stringify({
+        filamento: {marca: v('#xMarca'), material: v('#xMat'), cor: v('#xCor'),
+                    cor_hex: v('#xHex'), peso_g: +v('#xPeso') || 1000,
+                    url: p.url, imagem: p.imagem, loja: p.loja, ref: p.ref || '', seguir: 1},
+        bobine: {local_id: +v('#xLocal') || null, preco: +v('#xPreco') || 0,
+                 comprado_loja: p.loja, comprado_url: p.url, estado: 'selado',
+                 comprado_em: new Date().toISOString().slice(0, 10)},
+        quantidade: +v('#xQtd') || 1,
+      })});
+      dlg.close(); await carrega(); toast('adicionado ao inventário');
+    } catch (e) { toast(e.message); }
+  };
+}
+
+/* ============================ preços ============================ */
+function desenhaPrecos() {
+  const fs = INV.filamentos.filter(f => f.seguir);
+  $('#pInfo').textContent = `${fs.length} filamento(s) a seguir · actualiza sozinho a cada 24 h`;
+  $('#precos').innerHTML = fs.length ? fs.map(f => {
+    const ps = (INV.precos[f.id] || []).slice().sort((a, b) => (a.preco_kg || a.preco) - (b.preco_kg || b.preco));
+    const nome = [f.marca, f.material, f.cor].filter(Boolean).join(' ');
+    return `<div class="card" style="margin-bottom:10px">
+      <div class="row"><div class="swatch" style="background:${esc(f.cor_hex || '#333a46')};width:28px;height:28px"></div>
+        <b>${esc(nome)}</b>
+        <button class="ghost" data-pf="${f.id}" style="margin-left:auto">actualizar</button></div>
+      ${ps.length ? ps.map(p => `<div class="mv">
+        <span class="loja${INV.lojas[p.loja]?.pais === 'PT' ? ' pt' : ''}">${esc(INV.lojas[p.loja]?.nome || p.loja)}</span>
+        <b>${eur(p.preco)}</b><span class="why">${p.preco_kg ? eur(p.preco_kg) + '/kg' : ''} · ${
+          new Date(p.visto_em * 1000).toLocaleDateString('pt-PT')}</span>
+        <a href="${esc(p.url)}" target="_blank" rel="noopener" style="margin-left:auto">ver</a></div>`).join('')
+        : '<div class="sub" style="margin-top:8px">ainda sem preços — carrega em actualizar</div>'}
+    </div>`;
+  }).join('') : '<div class="empty">Nada a seguir ainda.</div>';
+  $$('#precos [data-pf]').forEach(b => b.onclick = async () => {
+    toast('a perguntar às lojas…', 60000);
+    try {
+      const r = await api('/api/filamentos/' + b.dataset.pf + '/precos', {method: 'POST'});
+      toast(r.gravados ? `${r.gravados} preço(s) actualizados` : 'nenhuma loja tem este produto');
+      await carrega();
+    } catch (e) { toast(e.message); }
+  });
+}
+
+/* ============================ locais ============================ */
+function desenhaLocais() {
+  const conta = {};
+  INV.bobines.forEach(b => { if (b.local_id) conta[b.local_id] = (conta[b.local_id] || 0) + 1; });
+  $('#locais').innerHTML = INV.locais.map(l => {
+    const n = conta[l.id] || 0, cap = l.capacidade || 0;
+    const cheio = cap > 0 && n >= cap;
+    return `<div class="card" style="margin-bottom:8px">
+      <div class="row">
+        <input value="${esc(l.nome)}" data-ln="${l.id}" style="flex:1;min-width:160px">
+        <input type="number" value="${cap}" data-lc="${l.id}" style="width:96px" title="capacidade">
+        <span class="pill ${cheio ? 'bad' : (cap ? 'good' : '')}">${n}${cap ? ' / ' + cap : ''}</span>
+        <button class="ghost danger" data-lx="${l.id}">apagar</button>
+      </div>
+      <div class="sub" style="margin-top:6px">${esc(caminhoLocal(l.id))} · ${esc(l.tipo || '')}</div>
+    </div>`;
+  }).join('') || '<div class="empty">Sem locais.</div>';
+  const guarda = async el => {
+    const id = el.dataset.ln || el.dataset.lc;
+    const corpo = el.dataset.ln ? {nome: el.value} : {capacidade: +el.value || 0};
+    try { await api('/api/locais/' + id, {method: 'PATCH', body: JSON.stringify(corpo)}); await carrega(); }
+    catch (e) { toast(e.message); }
+  };
+  $$('#locais [data-ln],#locais [data-lc]').forEach(i => i.onchange = () => guarda(i));
+  $$('#locais [data-lx]').forEach(b => b.onclick = async () => {
+    if (!confirm('Apagar este local? As bobines que lá estão ficam sem local.')) return;
+    await api('/api/locais/' + b.dataset.lx, {method: 'DELETE'}); await carrega(); toast('local apagado');
+  });
+  const sel = ll => INV.locais.map(l => `<option value="${l.id}">${esc(caminhoLocal(l.id))}</option>`).join('');
+  $('#lPai').innerHTML = '<option value="">(raiz)</option>' + sel();
+  $('#mLocal').innerHTML = '<option value="">(sem local)</option>' + sel();
+}
+</script>
+<script>
+/* ============================ agente ============================ */
+let PLANO = null;
+function desenhaPlano(pid, p) {
+  PLANO = {id: pid, plano: p};
+  const nome = id => caminhoLocal(id) || ('local ' + id);
+  $('#plano').innerHTML = `<div class="card" style="margin-bottom:12px">
+    <div class="row"><h2 style="margin:0">Proposta</h2>
+      <span class="pill warn" style="margin-left:auto">ainda não foi aplicada</span></div>
+    <p style="margin:10px 0 0">${esc(p.resumo)}</p>
+    ${p.locais_novos.length ? `<div class="plan"><h3>Espaços a criar (${p.locais_novos.length})</h3>${
+      p.locais_novos.map(l => `<div class="mv"><span class="arw">+</span><b>${esc(l.nome)}</b>
+        <span class="why">${esc(l.tipo || '')}${l.capacidade ? ' · cabe ' + l.capacidade : ''} — ${esc(l.porque || '')}</span></div>`).join('')}</div>` : ''}
+    ${p.locais_renomear.length ? `<div class="plan"><h3>Espaços a renomear (${p.locais_renomear.length})</h3>${
+      p.locais_renomear.map(r => `<div class="mv"><span>${esc(nome(r.id))}</span><span class="arw">→</span>
+        <b>${esc(r.nome_novo)}</b><span class="why">${esc(r.porque || '')}</span></div>`).join('')}</div>` : ''}
+    ${p.movimentos.length ? `<div class="plan"><h3>Bobines a mudar de sítio (${p.movimentos.length})</h3>${
+      p.movimentos.map(m => {
+        const b = INV.bobines.find(x => x.id === m.bobine_id) || {};
+        const f = FIL[b.filamento_id] || {};
+        const de = caminhoLocal(b.local_id) || 'sem local';
+        return `<div class="mv"><b>${esc([f.marca, f.material, f.cor].filter(Boolean).join(' ') || ('bobine ' + m.bobine_id))}</b>
+          <span class="why">${esc(de)}</span><span class="arw">→</span><b>${esc(m.para)}</b>
+          <span class="why">${esc(m.porque || '')}</span></div>`;
+      }).join('')}</div>` : ''}
+    ${p.avisos.length ? `<div class="plan" style="border-color:var(--warn)"><h3>Avisos</h3>${
+      p.avisos.map(a => `<div class="sub" style="padding:4px 0">⚠ ${esc(a)}</div>`).join('')}</div>` : ''}
+    <div class="row" style="margin-top:14px">
+      <button class="primary" id="aApply">Apply — aplicar isto</button>
+      <button class="ghost" id="aDrop" style="margin-left:auto">descartar</button>
+    </div></div>`;
+  $('#aApply').onclick = async () => {
+    try {
+      const r = await api('/api/agente/aplicar', {method: 'POST', body: JSON.stringify({plano_id: pid})});
+      if (r.erro) return toast(r.erro);
+      toast(`aplicado: ${r.feito.criados} espaços criados, ${r.feito.renomeados} renomeados, ${r.feito.movidos} bobines mudadas`, 5000);
+      if (r.saltados?.length) toast('não deu para: ' + r.saltados.join('; '), 7000);
+      $('#plano').innerHTML = ''; await carrega(); await listaPlanos();
+    } catch (e) { toast(e.message); }
+  };
+  $('#aDrop').onclick = () => { $('#plano').innerHTML = ''; PLANO = null; };
+}
+async function listaPlanos() {
+  try {
+    const r = await api('/api/agente/planos');
+    const aplicados = r.planos.filter(p => p.estado === 'aplicado');
+    $('#planos').innerHTML = aplicados.length ? `<div class="card"><h3>Já aplicados</h3>${
+      aplicados.map(p => `<div class="mv"><span>${new Date(p.criado_em * 1000).toLocaleString('pt-PT')}</span>
+        <span class="why">${esc((p.instrucoes || '').slice(0, 70) || 'sem instruções')}</span>
+        <button class="ghost" data-undo="${p.id}" style="margin-left:auto">anular</button></div>`).join('')}</div>` : '';
+    $$('#planos [data-undo]').forEach(b => b.onclick = async () => {
+      if (!confirm('Anular este plano? As bobines voltam aos sítios anteriores.')) return;
+      const r2 = await api('/api/agente/anular', {method: 'POST', body: JSON.stringify({plano_id: +b.dataset.undo})});
+      if (r2.erro) return toast(r2.erro);
+      toast(r2.locais_mantidos?.length ? 'anulado (alguns espaços ficaram, tinham bobines)' : 'anulado');
+      await carrega(); await listaPlanos();
+    });
+  } catch (e) {}
+}
+
+/* ============================ definições ============================ */
+let DEF = null;
+async function desenhaDef() {
+  DEF = await api('/api/definicoes');
+  $('#chaves').innerHTML = Object.entries(DEF.fornecedores).map(([k, v]) => `
+    <div class="field"><label>${esc(v.nome)}${v.tem ? ` — guardada (…${esc(v.fim)})` : ''}</label>
+      <input type="password" data-key="${esc(k)}" placeholder="${v.tem ? 'deixa vazio para manter' : 'colar chave'}"></div>`).join('')
+    + `<div class="field"><label>Quem responde ao agente</label><select id="dForn">${
+      Object.entries(DEF.fornecedores).map(([k, v]) =>
+        `<option value="${esc(k)}"${k === DEF.fornecedor ? ' selected' : ''}>${esc(v.nome)}${v.tem ? '' : ' (sem chave)'}</option>`).join('')}</select></div>`;
+  $('#aForn').innerHTML = Object.entries(DEF.fornecedores).map(([k, v]) =>
+    `<option value="${esc(k)}"${k === DEF.fornecedor ? ' selected' : ''}>${esc(v.nome)}</option>`).join('');
+  const semChave = !DEF.fornecedores[DEF.fornecedor]?.tem;
+  $('#aInfo').textContent = semChave ? 'sem chave — vai a Definições' : '';
+  const p = await api('/api/ponte');
+  $('#ponte').innerHTML = `<div class="pill good">activa</div>
+    <div class="sub" style="margin-top:8px">Segredo em <code>${esc(p.ficheiro)}</code>.
+      O Fatia lê-o sozinho — não precisas de copiar nada.</div>`;
+}
+
+/* ============================ auth + arranque ============================ */
+async function carrega() {
+  INV = await api('/api/inventario');
+  reindexa();
+  const bs = INV.bobines.filter(b => b.estado !== 'arquivado');
+  const kg = bs.reduce((a, b) => a + (b.estado === 'vazio' ? 0 : (+b.restante_g || 0)), 0) / 1000;
+  $('#resumoTopo').textContent =
+    `${INV.filamentos.length} filamentos · ${bs.length} bobines · ${kg.toFixed(1)} kg em casa`;
+  $('#ver').textContent = 'v' + (INV.versao || '');
+  desenhaLista(); desenhaChips(); desenhaPrecos(); desenhaLocais(); desenhaLojas();
+}
+
+async function entrar(registar) {
+  const email = $('#gEmail').value.trim(), password = $('#gPass').value;
+  try {
+    await api('/api/auth/' + (registar ? 'register' : 'login'),
+              {method: 'POST', body: JSON.stringify({email, password})});
+    location.reload();
+  } catch (e) { $('#gErr').textContent = e.message; }
+}
+
+async function arranca() {
+  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon')]);
+  LEX = lex;
+  if (!me.user) {
+    $('#gate').hidden = false;
+    const primeiro = me.primeiro_arranque;
+    $('#gateTitle').textContent = primeiro ? 'Criar conta' : 'Entrar';
+    $('#gGo').textContent = primeiro ? 'Criar conta' : 'Entrar';
+    $('#gHint').textContent = primeiro ? 'É a primeira vez — esta conta fica a dona do inventário.' : '';
+    $('#gGo').onclick = () => entrar(primeiro);
+    $('#gPass').onkeydown = e => { if (e.key === 'Enter') entrar(primeiro); };
+    return;
+  }
+  $('#app').hidden = false; $('#navtabs').hidden = false;
+  await carrega();
+  desenhaDef().catch(() => {});
+  listaPlanos();
+  $('#q').focus();
+}
+
+/* ---- ligações ---- */
+$('#q').addEventListener('input', () => { desenhaLista(); desenhaChips(); });
+$('#qClr').onclick = () => { $('#q').value = ''; desenhaLista(); desenhaChips(); $('#q').focus(); };
+$('#qChips').addEventListener('click', e => {
+  const c = e.target.closest('[data-chip]'); if (!c) return;
+  const termo = c.dataset.chip, actuais = termosDe($('#q').value);
+  const jaLa = actuais.includes(norm(termo));
+  $('#q').value = jaLa ? actuais.filter(t => t !== norm(termo)).join(' ')
+                       : ($('#q').value.trim() + ' ' + termo).trim();
+  desenhaLista(); desenhaChips(); $('#q').focus();
+});
+$('#lista').addEventListener('click', e => {
+  const c = e.target.closest('[data-fil]'); if (c) abreFilamento(+c.dataset.fil);
+});
+/* a pesquisa nas lojas é na rede, por isso espera que se pare de escrever */
+$('#sq').addEventListener('input', () => { clearTimeout(sqTimer); sqTimer = setTimeout(procuraLojas, 450); });
+$('#sqLojas').addEventListener('click', e => {
+  const c = e.target.closest('[data-loja]'); if (!c) return;
+  const k = c.dataset.loja;
+  LOJAS_SEL.has(k) ? LOJAS_SEL.delete(k) : LOJAS_SEL.add(k);
+  desenhaLojas(); procuraLojas();
+});
+$('#navtabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-tab]'); if (!b) return;
+  $$('#navtabs button').forEach(x => x.classList.toggle('active', x === b));
+  $$('.tabsec').forEach(s => s.classList.toggle('active', s.id === 'tab-' + b.dataset.tab));
+  if (b.dataset.tab === 'buscar') $('#q').focus();
+  if (b.dataset.tab === 'add') $('#sq').focus();
+  if (b.dataset.tab === 'def') desenhaDef().catch(() => {});
+});
+$('#mAdd').onclick = async () => {
+  const v = id => $(id).value;
+  if (!v('#mMarca') && !v('#mMat') && !v('#mCor')) return toast('dá-lhe pelo menos marca, material ou cor');
+  try {
+    await api('/api/adicionar', {method: 'POST', body: JSON.stringify({
+      filamento: {marca: v('#mMarca'), material: v('#mMat'), cor: v('#mCor'), cor_hex: v('#mHex'),
+                  peso_g: +v('#mPeso') || 1000, seguir: 1},
+      bobine: {local_id: +v('#mLocal') || null, preco: +v('#mPreco') || 0, estado: v('#mEstado'),
+               comprado_em: new Date().toISOString().slice(0, 10)},
+      quantidade: +v('#mQtd') || 1,
+    })});
+    ['#mMarca', '#mMat', '#mCor', '#mPreco'].forEach(i => $(i).value = '');
+    await carrega(); toast('adicionado');
+  } catch (e) { toast(e.message); }
+};
+$('#lAdd').onclick = async () => {
+  if (!$('#lNome').value.trim()) return toast('o local precisa de nome');
+  try {
+    await api('/api/locais', {method: 'POST', body: JSON.stringify({
+      nome: $('#lNome').value.trim(), tipo: $('#lTipo').value,
+      pai_id: +$('#lPai').value || null, capacidade: +$('#lCap').value || 0})});
+    $('#lNome').value = ''; await carrega(); toast('local criado');
+  } catch (e) { toast(e.message); }
+};
+$('#pRefresh').onclick = async () => {
+  const fs = INV.filamentos.filter(f => f.seguir);
+  if (!fs.length) return toast('não tens nada a seguir');
+  toast(`a perguntar às lojas por ${fs.length} filamento(s)…`, 120000);
+  let n = 0;
+  for (const f of fs) {
+    try { const r = await api('/api/filamentos/' + f.id + '/precos', {method: 'POST'}); n += r.gravados || 0; }
+    catch (e) {}
+  }
+  await carrega(); toast(`${n} preço(s) actualizados`);
+};
+$('#aPreview').onclick = async () => {
+  const b = $('#aPreview'); b.disabled = true; b.textContent = 'a pensar…';
+  try {
+    const r = await api('/api/agente/plano', {method: 'POST', body: JSON.stringify({
+      instrucoes: $('#aInstr').value, fornecedor: $('#aForn').value})});
+    if (r.erro) toast(r.erro, 6000); else desenhaPlano(r.plano_id, r.plano);
+  } catch (e) { toast(e.message, 6000); }
+  finally { b.disabled = false; b.textContent = 'Preview'; }
+};
+$('#dSave').onclick = async () => {
+  const corpo = {fornecedor: $('#dForn').value};
+  $$('#chaves [data-key]').forEach(i => { if (i.value.trim()) corpo[i.dataset.key + '_api_key'] = i.value.trim(); });
+  try { await api('/api/definicoes', {method: 'PATCH', body: JSON.stringify(corpo)});
+        await desenhaDef(); toast('guardado'); } catch (e) { toast(e.message); }
+};
+$('#btnSair').onclick = async () => { await api('/api/auth/logout', {method: 'POST'}); location.reload(); };
+
+arranca().catch(e => { document.body.innerHTML = '<div class="wrap"><div class="empty">' + esc(e.message) + '</div></div>'; });
+</script>
+</body>
+</html>
