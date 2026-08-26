@@ -32,6 +32,13 @@ por `/api/imagem` — o endereço da loja sozinho não chegava, parte no dia em 
 ela mexer nos ficheiros. Usa-se a miniatura que a própria loja serve (7–20 KB em
 vez de 300 KB) e só se vai buscar imagens aos domínios das cinco lojas.
 
+**Adicionar.** Um resultado de loja chega ao formulário já preenchido: marca,
+material (com a variante — `PETG Matte`, `PLA+`, `PETG CF`), cor, peso convertido
+para gramas e a cor em hex. As facetas saem de três fontes, por esta ordem: o
+título, a marca que a própria loja declara, e os termos que foram escritos na
+pesquisa. A varredura é por **frases** de até três palavras, senão marcas como
+"Professional Lab" ou "The Filament" nunca casariam.
+
 **Cores.** Sem foto — ou por preferência — a bobine é **desenhada** em traço e
 pintada pelo que está escrito na cor: `dark grey`, `wood ash`, `silk red`,
 `purple-blue`, `Pastel Mint Green`, `negro azabache`. São ~290 nomes de cor de

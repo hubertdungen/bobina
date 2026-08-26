@@ -1102,40 +1102,111 @@ async function procuraLojas() {
 
 /* Adivinha marca / material / cor a partir do título, usando o mesmo léxico.
    Poupa a escrita à mão, e tudo fica editável antes de gravar. */
-function adivinha(titulo) {
-  const toks = norm(titulo).split(' ').filter(Boolean);
+/* Descobre marca, material e cor de um produto de loja.
+
+   Três fontes, por esta ordem: o título, a marca que a própria loja declara (a
+   Shopify e a PrestaShop dizem-na, e vem já bem escrita), e por fim os termos
+   que foram escritos na pesquisa -- se alguém procurou "PETG preto" e o título
+   não diz a cor, a cor era essa.
+
+   Varre FRASES de até três palavras e não palavra a palavra: marcas como
+   "Professional Lab", "Devil Design" ou "The Filament" nunca podiam casar de
+   outra maneira, e eram 15 dos 77 produtos que ficavam sem marca nenhuma. */
+function achaFacetas(texto) {
+  const toks = norm(texto || '').split(' ').filter(Boolean);
   const cand = {marca: [], material: [], cor: []};
-  for (const t of toks) {
-    const hits = LEX.index[t] || [];
-    const grupos = new Set(hits.map(h => h.g));
-    for (const h of hits)
-      if (cand[h.g]) cand[h.g].push({c: h.c, t, unico: grupos.size === 1});
+  let i = 0;
+  while (i < toks.length) {
+    let casou = 0;
+    for (let n = Math.min(3, toks.length - i); n >= 1 && !casou; n--) {
+      const hits = LEX.index[toks.slice(i, i + n).join(' ')] || [];
+      if (!hits.length) continue;
+      const grupos = new Set(hits.map(h => h.g));
+      for (const h of hits)
+        if (cand[h.g]) cand[h.g].push({c: h.c, peso: n, unico: grupos.size === 1});
+      casou = n;
+    }
+    i += casou || 1;
   }
-  /* Não vale ficar pelo primeiro que aparece: num "PLA Silk (Refill) 1kg Ocean
-     Blue - Azurefilm", o "refill" vinha antes e a marca saía errada. Ganha o
-     termo que só pode ser aquilo (não é também cor, nem formato) e, em empate,
-     o mais comprido. */
-  const escolhe = arr => {
-    if (!arr.length) return '';
-    arr.sort((a, b) => (b.unico - a.unico) || (b.t.length - a.t.length));
-    return arr[0].c;
-  };
-  const marca = escolhe(cand.marca);
-  const achado = {
-    // a chave do léxico é minúscula porque é assim que se compara; para mostrar
-    // usa-se a forma como a marca escreve o próprio nome
-    marca: (LEX.marcas_nome && LEX.marcas_nome[marca]) || marca,
-    material: escolhe(cand.material).toUpperCase(),
-    cor: escolhe(cand.cor),
-  };
+  return cand;
+}
+/* Ganha o termo que só pode ser aquilo (não é também cor nem formato); em
+   empate, a frase mais longa. Sem isto, o "refill" de "PLA Silk (Refill) ...
+   Azurefilm" roubava a marca. */
+const escolheFaceta = arr => {
+  if (!arr.length) return '';
+  arr.sort((a, b) => (b.unico - a.unico) || (b.peso - a.peso) || (b.c.length - a.c.length));
+  return arr[0].c;
+};
+const nomeDaMarca = c => (LEX.marcas_nome && LEX.marcas_nome[c]) || c;
+
+/* Sufixos que fazem parte do NOME do material e não da cor. Sem eles, "PETG Pro"
+   e "PLA+" ficavam reduzidos a "PETG" e "PLA" -- que é a chave interna do
+   léxico, não o que está escrito na bobine. */
+const QUALIF_MAT = {'+': '+', 'plus': '+', 'pro': 'Pro', 'max': 'Max', 'basic': 'Basic',
+  'hf': 'HF', 'lw': 'LW', 'aero': 'Aero', 'cf': 'CF', 'gf': 'GF', 'x': 'X',
+  'tough': 'Tough', 'premium': 'Premium', 'ultra': 'Ultra', 'hs': 'HS', 'ht': 'HT',
+  'prime': 'Prime', 'lite': 'Lite', 'matte': 'Matte', 'silk': 'Silk', 'meta': 'Meta',
+  'rapid': 'Rapid', 'eco': 'Eco', 'flex': 'Flex', 'soft': 'Soft'};
+
+function materialFrase(texto) {
+  const toks = norm(texto || '').split(' ').filter(Boolean);
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i];
+    let base = (LEX.index[t] || []).some(h => h.g === 'material') ? t : '';
+    // "HT-PLA" e "PLA-E" não estão no léxico inteiros, mas uma das metades está;
+    // fica o token completo como nome, que é o que a loja escreveu
+    if (!base && t.includes('-')
+        && t.split('-').some(x => (LEX.index[x] || []).some(h => h.g === 'material')))
+      base = t;
+    if (!base) continue;
+    const partes = [base.toUpperCase()];
+    for (let j = i + 1; j < toks.length && QUALIF_MAT[toks[j]]; j++)
+      partes.push(QUALIF_MAT[toks[j]]);
+    return partes.join(' ').replace(' +', '+');
+  }
+  return '';
+}
+
+function adivinha(titulo, extra) {
+  extra = extra || {};
+  const doTitulo = achaFacetas(titulo);
+  const daConsulta = achaFacetas(extra.consulta || '');
+  const daLoja = achaFacetas(extra.marcaLoja || '');
+
+  let marca = escolheFaceta(doTitulo.marca);
+  if (marca) marca = nomeDaMarca(marca);
+  if (!marca && extra.marcaLoja) {
+    // a loja sabe e costuma escrever bem: se o léxico a conhece usa-se o nome
+    // canónico, senão fica o texto da loja tal e qual -- vale mais do que nada
+    const c = escolheFaceta(daLoja.marca);
+    marca = c ? nomeDaMarca(c) : String(extra.marcaLoja).trim();
+  }
+  if (!marca) {
+    const c = escolheFaceta(daConsulta.marca);
+    if (c) marca = nomeDaMarca(c);
+  }
+
+  // a frase como está escrita ganha ao canónico: "PETG Pro" > "PETG", "PLA+" > "PLA"
+  const material = materialFrase(titulo) || materialFrase(extra.consulta || '')
+    || (escolheFaceta(doTitulo.material) || escolheFaceta(daConsulta.material)).toUpperCase();
+  /* Tira do título as palavras que já foram para o nome do material, senão um
+     "PLA Silk Black" dava material "PLA Silk" E cor "Silk Black" -- o "silk"
+     repetido nos dois sítios. */
+  const semMaterial = material
+    ? norm(titulo).split(' ').filter(t => !norm(material).split(' ').includes(t)).join(' ')
+    : titulo;
+
   // o nome como a loja o escreve ganha ao canónico: "Ocean Blue" > "azul"
-  const frase = corFrase(titulo);
-  if (frase) achado.cor = frase;
-  return achado;
+  let cor = corFrase(semMaterial) || '';
+  if (!cor) cor = escolheFaceta(doTitulo.cor);
+  if (!cor) cor = corFrase(extra.consulta || '') || escolheFaceta(daConsulta.cor);
+
+  return {marca, material, cor};
 }
 
 async function adicionaDeLoja(p) {
-  const g = adivinha(p.titulo);
+  const g = adivinha(p.titulo, {marcaLoja: p.marca, consulta: ($('#sq').value || '')});
   const dlg = document.createElement('dialog');
   dlg.innerHTML = `<div class="dlg"><h2>Adicionar</h2>
     <div class="sub" style="margin-bottom:12px">${esc(p.titulo)}</div>
@@ -1154,8 +1225,10 @@ async function adicionaDeLoja(p) {
         <label class="tog on" id="xCaixaChip" style="align-self:flex-start">
           <input type="checkbox" id="xCaixa" checked>${CAIXA_MINI} vem na caixa</label></div>
     </div>
-    <div class="field" style="margin-top:12px"><label>Bobine — cor</label>
+    <div class="field" style="margin-top:12px"><label>Bobine — cor e imagem</label>
       <div class="previa" id="xPrev"></div>
+      ${p.imagem ? `<div class="row" style="margin-top:8px"><label class="tog" id="xIconeTog">
+        <input type="checkbox" id="xIcone">${BOBINA_MINI} desenhar em vez da foto</label></div>` : ''}
       ${pickerHTML('add', '')}</div>
     <div class="row" style="margin-top:14px">
       <button class="primary" id="xOk">Adicionar ao inventário</button>
@@ -1171,14 +1244,21 @@ async function adicionaDeLoja(p) {
   const desenha = () => {
     const nome = dlg.querySelector('#xCor').value;
     const c = hexEscolhido || corDe(nome) || NEUTRA;
-    prev.innerHTML = (p.imagem ? `<img class="foto" src="${esc(p.imagem)}" width="46" height="46" alt="">` : '')
+    const desenhar = (dlg.querySelector('#xIcone') || {}).checked;
+    const usaFoto = p.imagem && !desenhar;
+    prev.innerHTML = (p.imagem ? `<img class="foto" src="${esc(p.imagem)}" width="46" height="46"
+        alt="" style="opacity:${usaFoto ? 1 : .35}">` : '')
       + bobinaSVG(c, 46, eTransparente(nome))
       + `<div class="sub">${hexEscolhido ? 'cor escolhida' : (corDe(nome) ? 'cor lida de <b>' + esc(nome) + '</b>' : 'sem cor reconhecida')}
-         <br>${esc(c)}${p.imagem ? ' · a loja tem foto' : ''}</div>`;
+         <br>${esc(c)}${p.imagem ? (usaFoto ? ' · fica a foto da loja' : ' · fica o desenho') : ''}</div>`;
   };
   const leHex = ligaPicker(dlg, 'add', v => { hexEscolhido = v; desenha(); });
   dlg.querySelector('#xCaixa').onchange = e =>
     dlg.querySelector('#xCaixaChip').classList.toggle('on', e.target.checked);
+  const togIc = dlg.querySelector('#xIcone');
+  if (togIc) togIc.onchange = () => {
+    dlg.querySelector('#xIconeTog').classList.toggle('on', togIc.checked); desenha();
+  };
   /* Com UMA bobine dá para dizer já quanto resta e despachar a catalogação sem
      abrir o detalhe. Com várias esconde-se: não se sabe qual delas é qual. */
   const qtd = dlg.querySelector('#xQtd'), rest = dlg.querySelector('#xRest');
@@ -1197,7 +1277,8 @@ async function adicionaDeLoja(p) {
       await api('/api/adicionar', {method: 'POST', body: JSON.stringify({
         filamento: {marca: v('#xMarca'), material: v('#xMat'), cor: v('#xCor'),
                     cor_hex: leHex(), peso_g: +v('#xPeso') || 1000,
-                    url: p.url, imagem: p.imagem, loja: p.loja, ref: p.ref || '', seguir: 1},
+                    url: p.url, imagem: p.imagem, loja: p.loja, ref: p.ref || '', seguir: 1,
+                    icone: (dlg.querySelector('#xIcone') || {}).checked ? 1 : 0},
         bobine: {local_id: +v('#xLocal') || null, preco: +v('#xPreco') || 0,
                  caixa: dlg.querySelector('#xCaixa').checked ? 1 : 0,
                  // só faz sentido com uma bobine: a várias, não se sabe qual é qual
@@ -1242,8 +1323,13 @@ function desenhaPrecos() {
 
 /* ============================ locais ============================ */
 function desenhaLocais() {
-  const conta = {};
-  INV.bobines.forEach(b => { if (b.local_id) conta[b.local_id] = (conta[b.local_id] || 0) + 1; });
+  const conta = {}, gramas = {};
+  INV.bobines.forEach(b => {
+    if (!b.local_id) return;
+    conta[b.local_id] = (conta[b.local_id] || 0) + 1;
+    gramas[b.local_id] = (gramas[b.local_id] || 0)
+      + (b.estado === 'vazio' ? 0 : (+b.restante_g || 0));
+  });
 
   /* filhos por pai. Um local cujo pai desapareceu volta a ser raiz em vez de
      sumir da lista -- ninguém consegue arrumar o que não vê. */
@@ -1273,7 +1359,10 @@ function desenhaLocais() {
   const nodo = l => {
     const cap = l.capacidade || 0;
     const aqui = conta[l.id] || 0;
-    const dentro = [...descendentes(l.id)].reduce((a, id) => a + (conta[id] || 0), 0);
+    const filhosDe = [...descendentes(l.id)];
+    const dentro = filhosDe.reduce((a, id) => a + (conta[id] || 0), 0);
+    // o peso segue a mesma regra da contagem: uma raiz soma tudo o que tem dentro
+    const kg = ((gramas[l.id] || 0) + filhosDe.reduce((a, id) => a + (gramas[id] || 0), 0)) / 1000;
     /* A conta de um local é a dele MAIS a de tudo o que está lá dentro: uma
        estante com duas gavetas de 4 bobines tem 8, não zero. A capacidade é
        comparada com esse total, que é o que de facto lá está. */
@@ -1286,6 +1375,8 @@ function desenhaLocais() {
         <input value="${esc(l.nome)}" data-ln="${l.id}" title="nome do local">
         <span class="pill ${cheio ? 'bad' : (cap ? 'good' : '')}"
               title="tudo o que está aqui dentro${cap ? ', e o que cabe' : ''}">${total}${cap ? ' / ' + cap : ''}</span>
+        ${kg > 0 ? `<span class="via" title="filamento por gastar, somando os locais lá dentro">${
+          kg >= 1 ? kg.toFixed(1) + ' kg' : Math.round(kg * 1000) + ' g'}</span>` : ''}
         <button class="ghost danger" data-lx="${l.id}" title="apagar">✕</button>
       </div>
       ${dentro ? `<div class="locdet">${aqui} aqui · ${dentro} nos ${meus.length} local(is) lá dentro</div>` : ''}
@@ -1446,7 +1537,7 @@ async function carrega() {
   const bs = INV.bobines.filter(b => b.estado !== 'arquivado');
   const kg = bs.reduce((a, b) => a + (b.estado === 'vazio' ? 0 : (+b.restante_g || 0)), 0) / 1000;
   $('#resumoTopo').textContent =
-    `${INV.filamentos.length} filamentos · ${bs.length} bobines · ${kg.toFixed(1)} kg em casa`;
+    `${INV.filamentos.length} filamentos · ${bs.length} bobines · ${kg.toFixed(1)} kg armazenados`;
   $('#ver').textContent = 'v' + (INV.versao || '');
   desenhaLista(); desenhaChips(); desenhaPrecos(); desenhaLocais(); desenhaLojas();
 }
