@@ -30,7 +30,7 @@ import lexicon
 import lojas
 
 ROOT = Path(__file__).resolve().parent
-VERSAO = "1.2.0"
+VERSAO = "1.3.0"
 SESSION_COOKIE = "bobina_session"
 SESSION_DIAS = int(os.environ.get("BOBINA_SESSION_DAYS", "30"))
 MAX_BODY = int(os.environ.get("BOBINA_MAX_BODY", "2097152"))
@@ -207,6 +207,16 @@ def executa(sql: str, args: tuple = ()) -> int:
         return cur.lastrowid
 
 
+def altera(sql: str, args: tuple = ()) -> int:
+    """Como `executa`, mas devolve quantas linhas mudaram. Num UPDATE o
+    `lastrowid` não quer dizer nada -- chegou a devolver 2 quando só uma bobine
+    tinha sido arrastada."""
+    with DB_LOCK:
+        cur = db().execute(sql, args)
+        db().commit()
+        return cur.rowcount
+
+
 # ---------------------------------------------------------------- utilizadores --
 
 def hash_pass(password: str, salt: str) -> str:
@@ -247,6 +257,40 @@ def user_da_sessao(token: str | None) -> dict | None:
     if not s:
         return None
     return linha("SELECT id,email,criado_em FROM users WHERE id=?", (s["user_id"],))
+
+
+def _apara(restante: float, peso: float) -> float:
+    """O que resta nunca é negativo nem passa do que a bobine leva.
+
+    Sem isto dava para pôr 900 g numa bobine de 250 g e a barra de nível ficava
+    a dizer qualquer coisa. Peso desconhecido (0) deixa passar o valor."""
+    try:
+        r = float(restante or 0)
+        p = float(peso or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if p <= 0:
+        return max(0.0, r)
+    return max(0.0, min(r, p))
+
+
+def _estado_pelo_peso(estado: str, restante: float, peso: float) -> str:
+    """O estado segue o que resta, não o contrário.
+
+    Uma bobine a zero está vazia e uma bobine "selada" com metade do filamento
+    não existe -- se foi pesada abaixo do cheio, foi aberta. `arquivado` fica
+    intocado: é uma decisão de arrumação, não um estado físico."""
+    e = (estado or "").strip() or "selado"
+    if e == "arquivado":
+        return e
+    r, p = float(restante or 0), float(peso or 0)
+    if r <= 0:
+        return "vazio"
+    if e == "vazio":
+        return "aberto"
+    if p > 0 and r < p and e == "selado":
+        return "aberto"
+    return e
 
 
 def valida_pai(uid: int, lid: int, pai_id: int | None) -> str:
@@ -821,11 +865,28 @@ class Handler(SimpleHTTPRequestHandler):
                 executa("DELETE FROM filamentos WHERE id=? AND user_id=?", (fid, uid))
                 return self.json({"ok": True})
             campos = {k: corpo[k] for k in CAMPOS_FILAMENTO if k in corpo}
+            arrastadas = 0
+            if "peso_g" in campos:
+                antes = linha("SELECT peso_g FROM filamentos WHERE id=? AND user_id=?",
+                              (fid, uid)) or {}
+                velho, novo_peso = float(antes.get("peso_g") or 0), float(campos["peso_g"] or 0)
+                if novo_peso > 0 and velho > 0 and velho != novo_peso:
+                    # Corrigir 1000 para 750 num filamento tem de corrigir as
+                    # bobines dele. Só as que ainda estavam no peso antigo: uma
+                    # que já tenha sido pesada à mão é dado real e não se toca --
+                    # apenas se apara o restante ao que a bobine comporta.
+                    arrastadas = altera(
+                        "UPDATE bobines SET peso_liquido_g=?, actualizado_em=?"
+                        " WHERE filamento_id=? AND user_id=? AND peso_liquido_g=?",
+                        (novo_peso, t, fid, uid, velho))
+                    executa("UPDATE bobines SET restante_g=peso_liquido_g"
+                            " WHERE filamento_id=? AND user_id=? AND restante_g>peso_liquido_g",
+                            (fid, uid))
             if campos:
                 executa(f"UPDATE filamentos SET {','.join(f'{k}=?' for k in campos)},"
                         " actualizado_em=? WHERE id=? AND user_id=?",
                         (*campos.values(), t, fid, uid))
-            return self.json({"ok": True})
+            return self.json({"ok": True, "bobines_ajustadas": arrastadas})
         m = re.match(r"^/api/filamentos/(\d+)/precos$", caminho)
         if m and metodo == "POST":
             return self.json(actualiza_precos(int(m.group(1)), uid))
@@ -834,8 +895,17 @@ class Handler(SimpleHTTPRequestHandler):
         if caminho == "/api/bobines" and metodo == "POST":
             campos = {k: corpo[k] for k in CAMPOS_BOBINE if k in corpo}
             fid = int(campos.get("filamento_id") or 0)
-            if not linha("SELECT 1 FROM filamentos WHERE id=? AND user_id=?", (fid, uid)):
+            f = linha("SELECT peso_g FROM filamentos WHERE id=? AND user_id=?", (fid, uid))
+            if not f:
                 return self.erro("essa bobine tem de apontar para um filamento teu")
+            # Sem isto a coluna caía no seu DEFAULT de 1000 g e uma bobine de um
+            # filamento de 750 g nascia com 1000 g -- o "restante" ficava a mentir
+            # desde o primeiro dia. O peso do filamento é que manda.
+            campos.setdefault("peso_liquido_g", float(f["peso_g"] or 1000))
+            campos.setdefault("restante_g", float(campos["peso_liquido_g"]))
+            campos["restante_g"] = _apara(campos["restante_g"], campos["peso_liquido_g"])
+            campos["estado"] = _estado_pelo_peso(
+                campos.get("estado", "selado"), campos["restante_g"], campos["peso_liquido_g"])
             cols = ["user_id", "criado_em", "actualizado_em"] + list(campos)
             vals = [uid, t, t] + [campos[k] for k in campos]
             nid = executa(f"INSERT INTO bobines({','.join(cols)})"
@@ -850,6 +920,14 @@ class Handler(SimpleHTTPRequestHandler):
                 executa("DELETE FROM bobines WHERE id=? AND user_id=?", (bid, uid))
                 return self.json({"ok": True})
             campos = {k: corpo[k] for k in CAMPOS_BOBINE if k in corpo}
+            if "restante_g" in campos or "peso_liquido_g" in campos:
+                b = linha("SELECT peso_liquido_g, restante_g FROM bobines"
+                          " WHERE id=? AND user_id=?", (bid, uid)) or {}
+                peso = float(campos.get("peso_liquido_g", b.get("peso_liquido_g")) or 0)
+                rest = float(campos.get("restante_g", b.get("restante_g")) or 0)
+                campos["restante_g"] = _apara(rest, peso)
+                estado_actual = campos.get("estado", (b.get("estado") or "selado"))
+                campos["estado"] = _estado_pelo_peso(estado_actual, campos["restante_g"], peso)
             if campos:
                 executa(f"UPDATE bobines SET {','.join(f'{k}=?' for k in campos)},"
                         " actualizado_em=? WHERE id=? AND user_id=?",
@@ -916,8 +994,10 @@ class Handler(SimpleHTTPRequestHandler):
         ids = []
         for _ in range(quantas):
             campos = {k: b[k] for k in CAMPOS_BOBINE if k in b}
-            campos.update({"filamento_id": fid, "peso_liquido_g": peso,
-                           "restante_g": float(b.get("restante_g") or peso)})
+            rest = _apara(b.get("restante_g") if b.get("restante_g") is not None else peso, peso)
+            campos.update({"filamento_id": fid, "peso_liquido_g": peso, "restante_g": rest,
+                           "estado": _estado_pelo_peso(
+                               campos.get("estado") or b.get("estado") or "selado", rest, peso)})
             cols = ["user_id", "criado_em", "actualizado_em"] + list(campos)
             vals = [uid, t, t] + [campos[k] for k in campos]
             ids.append(executa(f"INSERT INTO bobines({','.join(cols)})"

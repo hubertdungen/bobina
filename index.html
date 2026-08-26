@@ -88,6 +88,19 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:12p
 .chip.on{background:var(--accent);color:#160b33;border-color:var(--accent)}
 .termo{background:rgba(167,139,250,.22);border-radius:4px;padding:0 2px}
 
+/* ---- vista agrupada por local ---- */
+.grupo{margin:16px 0 10px}
+.grupo:first-child{margin-top:4px}
+.grupocab{display:flex;align-items:center;gap:9px;margin-bottom:9px;flex-wrap:wrap}
+.grupocab h3{margin:0;color:var(--txt);text-transform:none;font-size:14px;letter-spacing:0}
+.grupocab .via{color:var(--dim);font-size:11.5px;font-weight:500}
+.vista{display:flex;gap:0;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-left:auto}
+.vista button{border:none;border-radius:0;padding:5px 11px;font-size:11.5px;min-height:30px;
+  background:transparent;color:var(--dim)}
+.vista button.on{background:var(--accent);color:#160b33}
+.spool.semstock{opacity:.62}
+.spool.semstock .swatch,.spool.semstock .bob,.spool.semstock .foto{filter:grayscale(.7)}
+
 /* ---- cartões de bobine ---- */
 .spools{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
 .spool{display:flex;gap:12px;align-items:flex-start;background:var(--panel);border:1px solid var(--line);
@@ -138,6 +151,9 @@ input[type=color]{width:44px;height:32px;min-height:32px;padding:2px;cursor:poin
 .locctrl .campo{display:flex;align-items:center;gap:5px}
 .locfilhos{margin:8px 0 0 10px;padding-left:14px;border-left:2px solid var(--line)}
 .locvazio{font-size:11.5px;color:var(--dim);padding:4px 0 0 2px}
+.locaviso{font-size:11.5px;color:var(--bad);margin-top:7px;display:flex;align-items:center;gap:6px}
+.locbox.excede{border-color:rgba(255,107,107,.55)}
+.locdet{font-size:11.5px;color:var(--dim);margin-top:5px}
 
 /* ---- agente ---- */
 .plan{border-left:3px solid var(--accent);padding-left:12px;margin:10px 0}
@@ -630,39 +646,113 @@ function realca(txt, termos) {
   return out;
 }
 
-function cartao(f, termos) {
-  const bs = vivas(f);
+/* `bs` deixa passar só as bobines de um local, para a vista agrupada poder
+   mostrar o mesmo filamento em dois sítios com as contas certas de cada um. */
+function cartao(f, termos, bs) {
+  bs = bs || vivas(f);
   const total = bs.reduce((a, b) => a + (+b.peso_liquido_g || 0), 0);
-  const rest = restante(f);
+  const rest = bs.reduce((a, b) => a + (b.estado === 'vazio' ? 0 : (+b.restante_g || 0)), 0);
   const pct = total > 0 ? Math.max(0, Math.min(100, rest / total * 100)) : 0;
   const locais = [...new Set(bs.map(b => caminhoLocal(b.local_id) || 'sem local'))];
   const nome = [f.marca, f.material, f.cor].filter(Boolean).join(' ');
   const peso = f.peso_g >= 1000 ? (f.peso_g / 1000) + ' kg' : f.peso_g + ' g';
   const abertas = bs.filter(b => b.estado === 'aberto').length;
-  return `<div class="spool" data-fil="${f.id}">
+  const vazio = bs.length === 0;
+  return `<div class="spool${vazio ? ' semstock' : ''}" data-fil="${f.id}">
     ${media(f, 44)}
     <div style="min-width:0;flex:1">
       <div class="nm">${realca(nome || 'sem nome', termos)}</div>
-      <div class="mt">${esc(peso)} · ${realca(locais.join(' · '), termos)}</div>
-      <div class="bar"><i style="width:${pct.toFixed(0)}%"></i></div>
-      <div class="mt">${Math.round(rest)} g de ${Math.round(total)} g${abertas ? ` · ${abertas} aberta${abertas > 1 ? 's' : ''}` : ''}</div>
+      <div class="mt">${esc(peso)}${vazio ? '' : ' · ' + realca(locais.join(' · '), termos)}</div>
+      ${vazio ? '' : `<div class="bar"><i style="width:${pct.toFixed(0)}%"></i></div>
+      <div class="mt">${Math.round(rest)} g de ${Math.round(total)} g${abertas ? ` · ${abertas} aberta${abertas > 1 ? 's' : ''}` : ''}</div>`}
     </div>
-    <div class="qty"><b>${bs.length}</b><div class="sub">bobine${bs.length === 1 ? '' : 's'}</div></div>
+    <div class="qty">${vazio ? '<span class="pill">sem stock</span>'
+      : `<b>${bs.length}</b><div class="sub">bobine${bs.length === 1 ? '' : 's'}</div>`}</div>
   </div>`;
+}
+
+/* Preferências que sobrevivem a fechar a página. O localStorage pode estar
+   fechado (janela privada, definições do browser), por isso nunca se conta com
+   ele: falha em silêncio e a app abre nos valores de omissão. */
+const PREF = {
+  ler(k, omissao) {
+    try { const v = localStorage.getItem('bobina.' + k); return v === null ? omissao : JSON.parse(v); }
+    catch (e) { return omissao; }
+  },
+  poe(k, v) { try { localStorage.setItem('bobina.' + k, JSON.stringify(v)); } catch (e) {} },
+};
+let VISTA = PREF.ler('vista', 'seguido');          // 'seguido' | 'local'
+let VER_SEM_STOCK = PREF.ler('semstock', false);
+
+/* Vista agrupada: um filamento com bobines em dois sítios aparece nos dois, com
+   as contas de cada um -- somar tudo num cartão só escondia metade da resposta
+   à pergunta "onde é que isto está". */
+function porLocal(fs, termos) {
+  const grupos = new Map();
+  const poe = (k, f, bs) => { if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push({f, bs}); };
+  for (const f of fs) {
+    const bs = vivas(f);
+    if (!bs.length) { poe(-1, f, []); continue; }
+    const por = new Map();
+    for (const b of bs) {
+      const k = b.local_id && LOC[b.local_id] ? b.local_id : 0;
+      if (!por.has(k)) por.set(k, []);
+      por.get(k).push(b);
+    }
+    for (const [k, lista] of por) poe(k, f, lista);
+  }
+  const chaves = [...grupos.keys()].sort((a, b) => {
+    if (a === b) return 0;
+    if (a === -1) return 1; if (b === -1) return -1;       // sem stock no fim
+    if (a === 0) return 1; if (b === 0) return -1;         // sem local logo antes
+    return caminhoLocal(a).localeCompare(caminhoLocal(b), 'pt');
+  });
+  return chaves.map(k => {
+    const itens = grupos.get(k);
+    const nb = itens.reduce((a, i) => a + i.bs.length, 0);
+    const kg = itens.reduce((a, i) => a + i.bs.reduce(
+      (x, b) => x + (b.estado === 'vazio' ? 0 : (+b.restante_g || 0)), 0), 0) / 1000;
+    const l = LOC[k];
+    const titulo = k === -1 ? 'Sem stock' : (k === 0 ? 'Sem local atribuído' : (l ? l.nome : 'local ' + k));
+    const via = (k > 0 && l && l.pai_id && LOC[l.pai_id]) ? caminhoLocal(l.pai_id) : '';
+    const cap = (k > 0 && l) ? (l.capacidade || 0) : 0;
+    return `<div class="grupo">
+      <div class="grupocab">
+        <h3>${esc(titulo)}</h3>
+        ${via ? `<span class="via">em ${esc(via)}</span>` : ''}
+        <span class="pill${cap && nb >= cap ? ' bad' : (cap ? ' good' : '')}">${nb}${cap ? ' / ' + cap : ''}</span>
+        ${k !== -1 ? `<span class="via">${kg.toFixed(1)} kg</span>` : ''}
+      </div>
+      <div class="spools">${itens.map(i => cartao(i.f, termos, i.bs)).join('')}</div>
+    </div>`;
+  }).join('');
 }
 
 function desenhaLista() {
   const q = $('#q').value;
   const termos = termosDe(q);
-  const fs = resultados(q);
-  $('#qCnt').textContent = q ? `${fs.length}` : '';
+  const todos = resultados(q);
+  /* Um filamento de que já não se tem nenhuma bobine não é inventário: fica
+     guardado (pelo histórico de preços e para se voltar a comprar) mas sai da
+     lista, senão continuava lá especado a fingir que se tem. */
+  const escondidos = todos.filter(f => vivas(f).length === 0).length;
+  const fs = VER_SEM_STOCK ? todos : todos.filter(f => vivas(f).length > 0);
+
+  $('#qCnt').textContent = q ? String(fs.length) : '';
   $('#qClr').hidden = !q;
-  $('#lista').innerHTML = fs.map(f => cartao(f, termos)).join('');
+  $('#lista').className = VISTA === 'local' ? '' : 'spools';
+  $('#lista').innerHTML = VISTA === 'local'
+    ? porLocal(fs, termos)
+    : fs.map(f => cartao(f, termos)).join('');
+
   const vazio = $('#vazio');
   vazio.hidden = fs.length > 0;
   if (!fs.length) {
+    const escape = escondidos && !VER_SEM_STOCK
+      ? `<br><span class="sub">${escondidos} sem stock — vê o botão <b>sem stock</b> aqui em cima.</span>` : '';
     vazio.innerHTML = INV.filamentos.length
-      ? `Nada com <b>${esc(q)}</b>.<br><span class="sub">Experimenta menos palavras — "asa preto" chega.</span>`
+      ? (q ? `Nada com <b>${esc(q)}</b>.<br><span class="sub">Experimenta menos palavras — "asa preto" chega.</span>${escape}`
+           : `Sem bobines em casa.${escape}`)
       : `Ainda não tens nada.<br><span class="sub">Vai a <b>Adicionar</b> e procura numa loja.</span>`;
   }
 }
@@ -671,8 +761,14 @@ function desenhaLista() {
 const CHIPS = ['PLA', 'PETG', 'ASA', 'ABS', 'TPU', 'Nylon', 'preto', 'branco', 'aberto', 'selado'];
 function desenhaChips() {
   const termos = termosDe($('#q').value);
+  const sem = INV.filamentos.filter(f => vivas(f).length === 0).length;
   $('#qChips').innerHTML = CHIPS.map(c =>
-    `<span class="chip${termos.includes(norm(c)) ? ' on' : ''}" data-chip="${esc(c)}">${esc(c)}</span>`).join('');
+      `<span class="chip${termos.includes(norm(c)) ? ' on' : ''}" data-chip="${esc(c)}">${esc(c)}</span>`).join('')
+    + (sem ? `<span class="chip${VER_SEM_STOCK ? ' on' : ''}" data-semstock="1">sem stock (${sem})</span>` : '')
+    + `<span class="vista" title="como mostrar a lista">
+        <button data-vista="seguido" class="${VISTA === 'seguido' ? 'on' : ''}">seguido</button>
+        <button data-vista="local" class="${VISTA === 'local' ? 'on' : ''}">por local</button>
+      </span>`;
 }
 </script>
 <script>
@@ -700,19 +796,26 @@ async function abreFilamento(fid) {
        <a href="${esc(p.url)}" target="_blank" rel="noopener" style="margin-left:auto">ver</a></div>`).join('')}` : ''}
     <h3 style="margin-top:14px">Bobines</h3>
     <div id="dbs">${bs.map(b => `<div class="card" style="margin-bottom:8px" data-b="${b.id}">
-      <div class="grid c3" style="gap:8px">
+      <div class="grid c4" style="gap:8px">
         <div class="field"><label>Onde está</label><select data-k="local_id">${opts(b.local_id)}</select></div>
         <div class="field"><label>Estado</label><select data-k="estado">
           ${['selado','aberto','vazio','arquivado'].map(e => `<option${e === b.estado ? ' selected' : ''}>${e}</option>`).join('')}</select></div>
-        <div class="field"><label>Restante (g)</label><input type="number" data-k="restante_g" value="${b.restante_g ?? ''}"></div>
+        <div class="field"><label>Bobine cheia (g)</label>
+          <input type="number" min="0" step="10" data-k="peso_liquido_g" value="${b.peso_liquido_g ?? ''}"></div>
+        <div class="field"><label>Restante (g)</label>
+          <input type="number" min="0" step="10" data-k="restante_g" value="${b.restante_g ?? ''}"></div>
       </div>
-      <div class="row" style="margin-top:8px">
-        <span class="sub">${b.preco ? 'pago ' + eur(b.preco) : 'sem preço'}</span>
-        <button class="ghost danger" data-del="${b.id}" style="margin-left:auto">apagar</button>
-      </div></div>`).join('') || '<div class="sub">nenhuma</div>'}</div>
+      <div class="row" style="margin-top:8px;gap:6px">
+        ${[['cheia',1],['¾',.75],['½',.5],['¼',.25],['vazia',0]].map(([t, fr]) =>
+          `<span class="chip" data-frac="${fr}">${t}</span>`).join('')}
+        <span class="sub" data-pct></span>
+        <span class="sub" style="margin-left:auto">${b.preco ? 'pago ' + eur(b.preco) : 'sem preço'}</span>
+        <button class="ghost danger" data-del="${b.id}">apagar</button>
+      </div></div>`).join('') || '<div class="sub">Sem bobines — já não tens nenhuma deste filamento.</div>'}</div>
     <div class="row" style="margin-top:14px">
       <button class="primary" id="dSalvar">Guardar</button>
       <button id="dPrecos">Ver preços agora</button>
+      <button class="ghost danger" id="dApagaFil">apagar filamento</button>
       <button class="ghost" id="dFechar" style="margin-left:auto">fechar</button>
     </div></div>`;
   document.body.appendChild(dlg);
@@ -733,12 +836,64 @@ async function abreFilamento(fid) {
   dlg.querySelector('#fCor').addEventListener('input', desenhaDet);
   if (dlg.querySelector('#fIcone')) dlg.querySelector('#fIcone').onchange = desenhaDet;
   desenhaDet();
+  /* O "restante" é sempre relativo AO QUE ESTA BOBINE LEVA: numa de 250 g, meia
+     bobine são 125 g e o máximo são 250. Os atalhos e a percentagem saem do
+     campo do peso, por isso corrigir o peso corrige tudo o resto na hora. */
+  dlg.querySelectorAll('[data-b]').forEach(c => {
+    const campoPeso = c.querySelector('[data-k="peso_liquido_g"]');
+    const rest = c.querySelector('[data-k="restante_g"]');
+    const pct = c.querySelector('[data-pct]');
+    const estado = c.querySelector('[data-k="estado"]');
+    const peso = () => +campoPeso.value || 0;
+    const refresca = () => {
+      const p = peso();
+      rest.max = p || '';
+      if (p && +rest.value > p) rest.value = p;
+      pct.textContent = p ? Math.round((+rest.value || 0) / p * 100) + '%' : 'peso por definir';
+    };
+    /* O estado segue o peso: pôr 999 g numa bobine de 1 kg é abri-la, pôr 0 é
+       esvaziá-la. Só corre quando é o RESTANTE que muda -- se corresse também ao
+       mexer no estado, escolher "aberto" numa bobine a zero saltava logo de
+       volta para "vazio" e não havia maneira de o utilizador mandar. */
+    const segueOPeso = () => {
+      if (estado.value === 'arquivado') return;
+      const p = peso(), r = +rest.value || 0;
+      if (r <= 0) estado.value = 'vazio';
+      else if (estado.value === 'vazio') estado.value = 'aberto';
+      else if (p > 0 && r < p && estado.value === 'selado') estado.value = 'aberto';
+    };
+    c.querySelectorAll('[data-frac]').forEach(bt => bt.onclick = () => {
+      rest.value = Math.round(peso() * +bt.dataset.frac); segueOPeso(); refresca();
+    });
+    campoPeso.oninput = () => { refresca(); segueOPeso(); };
+    rest.oninput = () => { refresca(); segueOPeso(); };
+    estado.onchange = () => {                       // selar enche, esvaziar zera
+      if (estado.value === 'vazio') rest.value = 0;
+      else if (estado.value === 'selado') rest.value = peso();
+      refresca();
+    };
+    refresca();
+  });
   const fecha = () => { dlg.close(); dlg.remove(); };
   dlg.querySelector('#dFechar').onclick = fecha;
+  dlg.querySelector('#dApagaFil').onclick = async () => {
+    const nome = [f.marca, f.material, f.cor].filter(Boolean).join(' ');
+    if (!confirm(`Apagar "${nome}" de vez?\n\nLeva as ${bs.length} bobine(s) e o histórico de preços.`)) return;
+    await api('/api/filamentos/' + fid, {method: 'DELETE'});
+    fecha(); await carrega(); toast('filamento apagado');
+  };
   dlg.addEventListener('close', () => dlg.remove());
   dlg.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     if (!confirm('Apagar esta bobine?')) return;
     await api('/api/bobines/' + b.dataset.del, {method: 'DELETE'});
+    /* Era a última? Então o filamento fica sem nada e não é inventário nenhum --
+       pergunta-se já, em vez de o deixar na lista a fingir que se tem. */
+    const ultima = bs.filter(x => x.id !== +b.dataset.del && x.estado !== 'arquivado').length === 0;
+    if (ultima && confirm('Era a última bobine deste filamento.\n\nApagar também o filamento?'
+        + '\n(Cancelar mantém-no guardado, com o histórico de preços, para voltares a comprar.)')) {
+      await api('/api/filamentos/' + fid, {method: 'DELETE'});
+      fecha(); await carrega(); return toast('filamento apagado');
+    }
     fecha(); await carrega(); toast('bobine apagada');
   });
   dlg.querySelector('#dSalvar').onclick = async () => {
@@ -954,19 +1109,25 @@ function desenhaLocais() {
   const TIPOS = ['sala', 'estante', 'prateleira', 'caixa', 'gaveta', 'impressora', 'outro'];
 
   const nodo = l => {
-    const n = conta[l.id] || 0, cap = l.capacidade || 0;
-    const cheio = cap > 0 && n >= cap;
-    const meus = filhos[l.id] || [];
-    /* o que está nas caixas lá dentro conta para se perceber o peso do ramo */
+    const cap = l.capacidade || 0;
+    const aqui = conta[l.id] || 0;
     const dentro = [...descendentes(l.id)].reduce((a, id) => a + (conta[id] || 0), 0);
-    return `<div class="loc"><div class="locbox">
+    /* A conta de um local é a dele MAIS a de tudo o que está lá dentro: uma
+       estante com duas gavetas de 4 bobines tem 8, não zero. A capacidade é
+       comparada com esse total, que é o que de facto lá está. */
+    const total = aqui + dentro;
+    const cheio = cap > 0 && total >= cap;
+    const excede = cap > 0 && total > cap;
+    const meus = filhos[l.id] || [];
+    return `<div class="loc"><div class="locbox${excede ? ' excede' : ''}">
       <div class="loclinha">
         <input value="${esc(l.nome)}" data-ln="${l.id}" title="nome do local">
         <span class="pill ${cheio ? 'bad' : (cap ? 'good' : '')}"
-              title="bobines aqui${cap ? ' / capacidade' : ''}">${n}${cap ? ' / ' + cap : ''}</span>
-        ${dentro ? `<span class="sub" title="nos locais lá dentro">+${dentro} dentro</span>` : ''}
+              title="tudo o que está aqui dentro${cap ? ', e o que cabe' : ''}">${total}${cap ? ' / ' + cap : ''}</span>
         <button class="ghost danger" data-lx="${l.id}" title="apagar">✕</button>
       </div>
+      ${dentro ? `<div class="locdet">${aqui} aqui · ${dentro} nos ${meus.length} local(is) lá dentro</div>` : ''}
+      ${excede ? `<div class="locaviso">⚠ passa a capacidade em ${total - cap} bobine(s)</div>` : ''}
       <div class="locctrl">
         <span class="campo"><span class="lab">dentro de</span>
           <select data-lp="${l.id}">${opcoesPai(l)}</select></span>
@@ -1155,6 +1316,11 @@ async function arranca() {
 $('#q').addEventListener('input', () => { desenhaLista(); desenhaChips(); });
 $('#qClr').onclick = () => { $('#q').value = ''; desenhaLista(); desenhaChips(); $('#q').focus(); };
 $('#qChips').addEventListener('click', e => {
+  const v = e.target.closest('[data-vista]');
+  if (v) { VISTA = v.dataset.vista; PREF.poe('vista', VISTA); desenhaLista(); desenhaChips(); return; }
+  const ss = e.target.closest('[data-semstock]');
+  if (ss) { VER_SEM_STOCK = !VER_SEM_STOCK; PREF.poe('semstock', VER_SEM_STOCK);
+            desenhaLista(); desenhaChips(); return; }
   const c = e.target.closest('[data-chip]'); if (!c) return;
   const termo = c.dataset.chip, actuais = termosDe($('#q').value);
   const jaLa = actuais.includes(norm(termo));
