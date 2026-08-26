@@ -30,7 +30,7 @@ import lexicon
 import lojas
 
 ROOT = Path(__file__).resolve().parent
-VERSAO = "1.7.0"
+VERSAO = "1.8.0"
 SESSION_COOKIE = "bobina_session"
 SESSION_DIAS = int(os.environ.get("BOBINA_SESSION_DAYS", "30"))
 MAX_BODY = int(os.environ.get("BOBINA_MAX_BODY", "2097152"))
@@ -264,6 +264,45 @@ def user_da_sessao(token: str | None) -> dict | None:
     return linha("SELECT id,email,criado_em FROM users WHERE id=?", (s["user_id"],))
 
 
+def canon(texto: str, grupo: str) -> str:
+    """A chave canónica de um termo, para poder comparar significados em vez de
+    letras: "Black", "Preto" e "Deep Black" dão todos "preto".
+
+    Varre frases de até três palavras (a mais longa ganha) porque "Professional
+    Lab" e "Devil Design" não casam palavra a palavra. Sem termo conhecido,
+    devolve o texto normalizado -- assim uma marca que o léxico não conheça
+    continua a comparar-se consigo própria."""
+    toks = [t for t in lexicon.norm(texto or "").split() if t]
+    for i in range(len(toks)):
+        for n in (3, 2, 1):
+            if i + n > len(toks):
+                continue
+            for h in lojas._INDEX.get(" ".join(toks[i:i + n]), []):
+                if h["g"] == grupo:
+                    return h["c"]
+    return " ".join(toks)
+
+
+def filamento_igual(uid: int, f: dict) -> dict | None:
+    """O filamento que já existe e é, para todos os efeitos, este.
+
+    Comparar texto não chegava: a mesma bobine comprada na Evolt ("Black") e na
+    Core XY ("Preto") ficava em dois grupos separados, com dois históricos de
+    preço e duas contagens. O peso continua a contar -- um rolo de 1 kg e uma
+    amostra de 250 g são produtos diferentes, com preços por quilo diferentes."""
+    chave = (canon(f.get("marca"), "marca"),
+             canon(f.get("material"), "material"),
+             canon(f.get("cor"), "cor"),
+             round(float(f.get("peso_g") or 1000), 1))
+    for existente in linhas("SELECT * FROM filamentos WHERE user_id=?", (uid,)):
+        if (canon(existente["marca"], "marca"),
+                canon(existente["material"], "material"),
+                canon(existente["cor"], "cor"),
+                round(float(existente["peso_g"] or 0), 1)) == chave:
+            return existente
+    return None
+
+
 def _apara(restante: float, peso: float) -> float:
     """O que resta nunca é negativo nem passa do que a bobine leva.
 
@@ -451,6 +490,33 @@ def filamentos_para_fatia(uid: int) -> list[dict]:
             "bobines": len([b for b in bs if b["estado"] != "vazio"]),
         })
     return saida
+
+
+# ------------------------------------------------------------ preferências --
+
+# O que a app assume quando se adiciona uma bobine, para não se andar a repetir
+# os mesmos cliques. Ficam no servidor e não no browser porque decidem o que é
+# GRAVADO, não como se vê -- e devem valer em qualquer aparelho.
+PREFS_OMISSAO = {
+    "caixa": True,            # bobines novas vêm na caixa
+    "desenhar": False,        # preferir a bobine desenhada à foto da loja
+    "seguir": True,           # seguir os preços dos filamentos novos
+    "estado": "selado",       # estado inicial de uma bobine nova
+    "diametro": 1.75,
+    "local": 0,               # local por omissão (0 = nenhum)
+}
+
+
+def prefs_de(uid: int) -> dict:
+    r = linha("SELECT valor FROM settings WHERE user_id=? AND chave='preferencias'", (uid,))
+    guardadas = {}
+    if r and r["valor"]:
+        try:
+            guardadas = json.loads(r["valor"]) or {}
+        except Exception:  # noqa: BLE001
+            guardadas = {}
+    # só se aceitam chaves conhecidas: um cliente antigo não deve poder inventar
+    return {k: guardadas.get(k, v) for k, v in PREFS_OMISSAO.items()}
 
 
 # ------------------------------------------------------ seguimento de preços --
@@ -721,6 +787,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "fornecedor": fornecedor,
                 "fornecedores": chaves,
                 "intervalo_precos_h": int(d.get("intervalo_precos_h") or INTERVALO_PADRAO_H),
+                "preferencias": prefs_de(uid),
             })
         if caminho == "/api/agente/planos":
             return self.json({"planos": linhas(
@@ -945,6 +1012,12 @@ class Handler(SimpleHTTPRequestHandler):
 
         # ---- definições ----
         if caminho == "/api/definicoes" and metodo == "PATCH":
+            if "preferencias" in corpo and isinstance(corpo["preferencias"], dict):
+                novas = {k: corpo["preferencias"].get(k, v)
+                         for k, v in prefs_de(uid).items()}
+                executa("INSERT INTO settings(user_id,chave,valor) VALUES(?,?,?)"
+                        " ON CONFLICT(user_id,chave) DO UPDATE SET valor=excluded.valor",
+                        (uid, "preferencias", json.dumps(novas, ensure_ascii=False)))
             permitidas = ["fornecedor", "intervalo_precos_h"]
             permitidas += [m["chave"] for m in agente.FORNECEDORES.values()]
             permitidas += [f"modelo_{f}" for f in agente.FORNECEDORES]
@@ -976,15 +1049,14 @@ class Handler(SimpleHTTPRequestHandler):
         material, cor, peso, preço e URL já preenchidos e daqui sai tudo gravado."""
         f = corpo.get("filamento") or {}
         fid = int(corpo.get("filamento_id") or 0)
+        juntou = None
         if not fid:
-            # já existe um igual? (mesma marca+material+cor+peso) — não duplicar
-            existente = linha(
-                "SELECT id FROM filamentos WHERE user_id=? AND lower(marca)=lower(?)"
-                " AND lower(material)=lower(?) AND lower(cor)=lower(?) AND peso_g=?",
-                (uid, f.get("marca") or "", f.get("material") or "",
-                 f.get("cor") or "", float(f.get("peso_g") or 1000)))
+            # já existe um igual? a comparação é por significado, não por letras
+            existente = filamento_igual(uid, f)
             if existente:
                 fid = existente["id"]
+                juntou = " ".join(x for x in (existente["marca"], existente["material"],
+                                              existente["cor"]) if x)
             else:
                 campos = {k: f[k] for k in CAMPOS_FILAMENTO if k in f}
                 cols = ["user_id", "criado_em", "actualizado_em"] + list(campos)
@@ -1011,7 +1083,10 @@ class Handler(SimpleHTTPRequestHandler):
             vals = [uid, t, t] + [campos[k] for k in campos]
             ids.append(executa(f"INSERT INTO bobines({','.join(cols)})"
                                f" VALUES({','.join('?' * len(cols))})", tuple(vals)))
-        return {"ok": True, "filamento_id": fid, "bobines": ids}
+        n = linha("SELECT COUNT(*) n FROM bobines WHERE filamento_id=? AND user_id=?",
+                  (fid, uid))
+        return {"ok": True, "filamento_id": fid, "bobines": ids,
+                "juntou": juntou, "total_bobines": (n or {}).get("n", len(ids))}
 
     # ------------------------------------------------------ agente (preview) --
     def _plano(self, uid: int, corpo: dict, t: int) -> dict:

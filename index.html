@@ -281,6 +281,10 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
       <div class="field"><label>Cor</label><input id="mCor" placeholder="Preto"></div>
       <div class="field"><label>Peso (g)</label><input id="mPeso" type="number" value="1000"></div>
       <div class="field"><label>Preço pago (€)</label><input id="mPreco" type="number" step="0.01"></div>
+      <div class="field"><label>Onde comprei</label>
+        <select id="mLoja"></select>
+        <input id="mLojaTxt" placeholder="nome da loja" hidden style="margin-top:6px"></div>
+      <div class="field"><label>Quando comprei</label><input id="mData" type="date"></div>
       <div class="field"><label>Quantas bobines</label><input id="mQtd" type="number" value="1" min="1"></div>
       <div class="field" id="mRestWrap"><label>Restante (g)</label>
         <input id="mRest" type="number" min="0" step="10" value="1000"></div>
@@ -351,6 +355,14 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
       quilo, calculado pelo que pagaste. Não é preciso configurar nada: as duas apps correm nesta
       máquina e falam por um ficheiro de segredo partilhado.</div>
     <div id="ponte" style="margin-top:10px"></div>
+  </div>
+  <div class="card" style="margin-bottom:12px">
+    <h2>Ao adicionar</h2>
+    <div class="sub" style="margin-bottom:10px">O que a app assume sozinha quando
+      adicionas uma bobine, para não repetires os mesmos cliques.</div>
+    <div class="row" id="prefsTogs" style="gap:8px"></div>
+    <div class="grid c3" style="gap:10px;margin-top:12px" id="prefsCampos"></div>
+    <div class="row" style="margin-top:12px"><button class="primary" id="prefsSave">Guardar</button></div>
   </div>
   <div class="card" style="margin-bottom:12px">
     <h2>Agente — chaves de API</h2>
@@ -693,6 +705,33 @@ function opcoesLocal(seleccionado, {excluir = null, vazio = ''} = {}) {
     }).join('');
 }
 
+/* Onde a bobine foi comprada. As seis lojas que a app conhece ficam pelo nome,
+   e há sempre "outra" para o que não está lá -- uma loja física, um site que
+   não seguimos, ou uma troca com alguém. Guarda-se a chave quando é uma das
+   conhecidas (para se poder mostrar o nome bonito e cruzar com os preços) e o
+   texto tal e qual quando não é. */
+const LOJA_OUTRA = '__outra';
+const nomeLoja = k => (INV.lojas && INV.lojas[k] ? INV.lojas[k].nome : (k || ''));
+function opcoesLoja(sel) {
+  const conhecidas = Object.entries(INV.lojas || {});
+  const eConhecida = conhecidas.some(([k]) => k === sel);
+  return '<option value="">— não sei —</option>'
+    + conhecidas.map(([k, v]) =>
+        `<option value="${esc(k)}"${k === sel ? ' selected' : ''}>${esc(v.nome)}</option>`).join('')
+    + `<option value="${LOJA_OUTRA}"${(sel && !eConhecida) ? ' selected' : ''}>outra…</option>`;
+}
+/* Liga um par select+input: o input só aparece quando se escolhe "outra". */
+function ligaLoja(raiz, idSel, idTxt, valor) {
+  const sel = raiz.querySelector(idSel), txt = raiz.querySelector(idTxt);
+  if (!sel || !txt) return () => '';
+  const conhecida = INV.lojas && INV.lojas[valor];
+  if (valor && !conhecida) txt.value = valor;
+  const mostra = () => { txt.hidden = sel.value !== LOJA_OUTRA; };
+  sel.addEventListener('change', mostra);
+  mostra();
+  return () => sel.value === LOJA_OUTRA ? txt.value.trim() : sel.value;
+}
+
 function reindexa() {
   FIL = {}; LOC = {}; PORLOC = {}; HAY = {};
   INV.locais.forEach(l => LOC[l.id] = l);
@@ -704,12 +743,26 @@ function reindexa() {
     HAY[f.id] = norm([
       f.marca, f.material, f.cor, f.etiquetas, f.notas, f.ref, f.loja,
       peso, f.diametro,
+      // a chave E o nome: procurar "Core XY" não podia falhar por estar
+      // guardado "corexy"
       ...bs.map(b => [b.etiqueta, b.estado, b.notas, b.comprado_loja,
-                      caminhoLocal(b.local_id)].join(' ')),
+                      nomeLoja(b.comprado_loja), caminhoLocal(b.local_id)].join(' ')),
     ].join(' '));
   }
 }
 const vivas = f => (PORLOC[f.id] || []).filter(b => b.estado !== 'arquivado');
+/* €/kg MÉDIO: a mesma referência pode ter sido comprada em alturas diferentes,
+   em lojas diferentes ou em promoção, e cada bobine traz o seu preço. A média é
+   ponderada pelo peso (total pago a dividir pelos quilos comprados), não pela
+   contagem -- senão uma amostra de 50 g pesava tanto como um rolo de 1 kg. Só
+   contam as bobines com preço registado. */
+function precoKg(bs) {
+  const comPreco = (bs || []).filter(b => +b.preco > 0 && +b.peso_liquido_g > 0);
+  if (!comPreco.length) return null;
+  const pago = comPreco.reduce((a, b) => a + (+b.preco || 0), 0);
+  const kg = comPreco.reduce((a, b) => a + (+b.peso_liquido_g || 0), 0) / 1000;
+  return kg > 0 ? pago / kg : null;
+}
 const restante = f => vivas(f).reduce((a, b) => a + (b.estado === 'vazio' ? 0 : (+b.restante_g || 0)), 0);
 
 /* ============================ pesquisa ============================ */
@@ -748,13 +801,17 @@ function cartao(f, termos, bs) {
   const abertas = bs.filter(b => b.estado === 'aberto').length;
   const vazio = bs.length === 0;
   const nCaixa = bs.filter(temCaixa).length;
+  const lojas = [...new Set(bs.map(b => nomeLoja(b.comprado_loja)).filter(Boolean))];
+  const pkg = precoKg(bs);
   return `<div class="spool${vazio ? ' semstock' : ''}" data-fil="${f.id}">
     ${media(f, 44, bs)}
     <div style="min-width:0;flex:1">
       <div class="nm">${realca(nome || 'sem nome', termos)}</div>
-      <div class="mt">${esc(peso)}${vazio ? '' : ' · ' + realca(locais.join(' · '), termos)}</div>
+      <div class="mt">${esc(peso)}${vazio ? '' : ' · ' + realca(locais.join(' · '), termos)}${
+        lojas.length ? ' · ' + realca(lojas.join(', '), termos) : ''}</div>
       ${vazio ? '' : `<div class="bar"><i style="width:${pct.toFixed(0)}%"></i></div>
-      <div class="mt">${Math.round(rest)} g de ${Math.round(total)} g${abertas ? ` · ${abertas} aberta${abertas > 1 ? 's' : ''}` : ''}${
+      <div class="mt">${Math.round(rest)} g de ${Math.round(total)} g${
+        pkg ? ` · <b>${eur(pkg)}/kg</b>` : ''}${abertas ? ` · ${abertas} aberta${abertas > 1 ? 's' : ''}` : ''}${
         nCaixa ? ` · ${CAIXA_MINI} ${nCaixa === bs.length ? 'na caixa' : nCaixa + ' na caixa'}` : ''}</div>`}
     </div>
     <div class="qty">${vazio ? '<span class="pill">sem stock</span>'
@@ -795,6 +852,8 @@ const ORDENADORES = {
   restante: [(a, b) => restante(b) - restante(a), 'mais filamento'],
   bobines: [(a, b) => vivas(b).length - vivas(a).length, 'mais bobines'],
   recente: [(a, b) => (b.criado_em || 0) - (a.criado_em || 0), 'adicionado há menos'],
+  barato: [(a, b) => (precoKg(vivas(a)) ?? 9e9) - (precoKg(vivas(b)) ?? 9e9), 'mais barato por kg'],
+  caro: [(a, b) => (precoKg(vivas(b)) ?? -1) - (precoKg(vivas(a)) ?? -1), 'mais caro por kg'],
 };
 const VISTAS = {
   seguido: 'tudo seguido', local: 'por local', marca: 'por marca',
@@ -810,12 +869,13 @@ function ordenaFilamentos(fs) {
   return fs.slice().sort(ORDENADORES[ORDEM] ? ORDENADORES[ORDEM][0] : ORDENADORES.nome[0]);
 }
 
-function cabecalhoGrupo(titulo, via, nb, cap, kg) {
+function cabecalhoGrupo(titulo, via, nb, cap, kg, pkg) {
   return `<div class="grupocab">
     <h3>${esc(titulo)}</h3>
     ${via ? `<span class="via">em ${esc(via)}</span>` : ''}
     <span class="pill${cap && nb >= cap ? ' bad' : (cap ? ' good' : '')}">${nb}${cap ? ' / ' + cap : ''}</span>
     ${kg > 0 ? `<span class="via">${kg.toFixed(1)} kg</span>` : ''}
+    ${pkg ? `<span class="via">${eur(pkg)}/kg em média</span>` : ''}
   </div>`;
 }
 
@@ -851,7 +911,8 @@ function porLocal(fs, termos) {
     const titulo = k === -1 ? 'Sem stock' : (k === 0 ? 'Sem local atribuído' : (l ? l.nome : 'local ' + k));
     const via = (k > 0 && l && l.pai_id && LOC[l.pai_id]) ? caminhoLocal(l.pai_id) : '';
     return `<div class="grupo">
-      ${cabecalhoGrupo(titulo, via, nb, (k > 0 && l) ? (l.capacidade || 0) : 0, k === -1 ? 0 : kg)}
+      ${cabecalhoGrupo(titulo, via, nb, (k > 0 && l) ? (l.capacidade || 0) : 0, k === -1 ? 0 : kg,
+                       precoKg(itens.flatMap(i => i.bs)))}
       <div class="spools">${itens.map(i => cartao(i.f, termos, i.bs)).join('')}</div>
     </div>`;
   }).join('');
@@ -877,7 +938,7 @@ function porFaceta(fs, termos, faceta) {
     const nb = itens.reduce((a, f) => a + vivas(f).length, 0);
     const kg = itens.reduce((a, f) => a + restante(f), 0) / 1000;
     return `<div class="grupo">
-      ${cabecalhoGrupo(k, '', nb, 0, kg)}
+      ${cabecalhoGrupo(k, '', nb, 0, kg, precoKg(itens.flatMap(f => vivas(f))))}
       <div class="spools">${itens.map(f => cartao(f, termos)).join('')}</div>
     </div>`;
   }).join('');
@@ -978,8 +1039,17 @@ async function abreFilamento(fid) {
         <label class="tog${+b.caixa ? ' on' : ''}" data-caixa>
           <input type="checkbox" data-k="caixa" ${+b.caixa ? 'checked' : ''}>${CAIXA_MINI} caixa</label>
         <span class="sub" data-pct></span>
-        <span class="sub" style="margin-left:auto">${b.preco ? 'pago ' + eur(b.preco) : 'sem preço'}</span>
-        <button class="ghost danger" data-del="${b.id}">apagar</button>
+        <button class="ghost danger" data-del="${b.id}" style="margin-left:auto">apagar</button>
+      </div>
+      <div class="grid c3" style="gap:8px;margin-top:8px">
+        <div class="field"><label>Onde comprei</label>
+          <select data-k="comprado_loja">${opcoesLoja(b.comprado_loja)}</select>
+          <input data-lojatxt placeholder="nome da loja" hidden style="margin-top:6px"></div>
+        <div class="field"><label>Preço pago (€)</label>
+          <input type="number" step="0.01" min="0" data-k="preco" value="${b.preco || ''}">
+          <span class="sub" data-sugpreco></span></div>
+        <div class="field"><label>Quando comprei</label>
+          <input type="date" data-k="comprado_em" value="${esc(b.comprado_em || '')}"></div>
       </div></div>`).join('') || '<div class="sub">Sem bobines — já não tens nenhuma deste filamento.</div>'}</div>
     <div class="row" style="margin-top:14px">
       <button class="primary" id="dSalvar">Guardar</button>
@@ -1063,6 +1133,27 @@ async function abreFilamento(fid) {
     c.querySelectorAll('[data-frac]').forEach(bt => bt.onclick = () => {
       rest.value = Math.round(peso() * +bt.dataset.frac); segueOPeso(); refresca();
     });
+    /* "outra" abre a caixa de texto; e se a loja escolhida for uma das seguidas
+       e já se souber o preço dela, oferece-se com um clique -- é para isso que
+       o histórico de preços serve. */
+    const selLoja = c.querySelector('[data-k="comprado_loja"]');
+    const txtLoja = c.querySelector('[data-lojatxt]');
+    const campoPreco = c.querySelector('[data-k="preco"]');
+    const sug = c.querySelector('[data-sugpreco]');
+    if (selLoja && !INV.lojas[b.comprado_loja] && b.comprado_loja) txtLoja.value = b.comprado_loja;
+    const refrescaLoja = () => {
+      txtLoja.hidden = selLoja.value !== LOJA_OUTRA;
+      const seguido = (INV.precos[fid] || []).find(x => x.loja === selLoja.value && x.preco);
+      if (seguido && !+campoPreco.value) {
+        sug.innerHTML = `preço seguido: <a href="#" data-usar>${eur(seguido.preco)}</a>`;
+        sug.querySelector('[data-usar]').onclick = ev => {
+          ev.preventDefault(); campoPreco.value = seguido.preco; sug.textContent = '';
+        };
+      } else sug.textContent = '';
+    };
+    if (selLoja) { selLoja.addEventListener('change', refrescaLoja); refrescaLoja(); }
+    if (campoPreco) campoPreco.addEventListener('input', refrescaLoja);
+
     const cx = c.querySelector('[data-k="caixa"]');
     if (cx) cx.onchange = () => {
       c.querySelector('[data-caixa]').classList.toggle('on', cx.checked);
@@ -1115,6 +1206,10 @@ async function abreFilamento(fid) {
                            : i.type === 'number' ? (+i.value || 0)
                            : (i.dataset.k === 'local_id' ? +i.value : i.value);
       });
+      if (corpo.comprado_loja === LOJA_OUTRA) {
+        const t = c.querySelector('[data-lojatxt]');
+        corpo.comprado_loja = t ? t.value.trim() : '';
+      }
       await api('/api/bobines/' + c.dataset.b, {method: 'PATCH', body: JSON.stringify(corpo)});
     }
     fecha(); await carrega(); toast('guardado');
@@ -1281,21 +1376,28 @@ async function adicionaDeLoja(p) {
       <div class="field"><label>Marca</label><input id="xMarca" value="${esc(g.marca)}"></div>
       <div class="field"><label>Material</label><input id="xMat" value="${esc(g.material)}"></div>
       <div class="field"><label>Cor</label><input id="xCor" value="${esc(g.cor)}"></div>
-      <div class="field"><label>Peso (g)</label><input id="xPeso" type="number" value="${p.peso_g || 1000}"></div>
-      <div class="field"><label>Preço pago (€)</label><input id="xPreco" type="number" step="0.01" value="${p.preco ?? ''}"></div>
+      <div class="field"><label>Peso (g)</label><input id="xPeso" type="number" min="0" step="10" value="${p.peso_g || 1000}"></div>
+      <div class="field"><label>Preço pago (€)</label>
+        <input id="xPreco" type="number" step="0.01" min="0" value="${p.preco ?? ''}">
+        <span class="sub" id="xPrecoNota"></span></div>
+      <div class="field"><label>Onde comprei</label>
+        <select id="xLoja">${opcoesLoja(p.loja)}</select>
+        <input id="xLojaTxt" placeholder="nome da loja" hidden style="margin-top:6px"></div>
+      <div class="field"><label>Quando comprei</label>
+        <input id="xData" type="date" value="${new Date().toISOString().slice(0, 10)}"></div>
       <div class="field"><label>Quantas</label><input id="xQtd" type="number" value="1" min="1"></div>
       <div class="field" id="xRestWrap"><label>Restante (g)</label>
         <input id="xRest" type="number" min="0" step="10" value="${p.peso_g || 1000}"></div>
       <div class="field"><label>Onde fica</label><select id="xLocal">${
-        opcoesLocal(null, {vazio: '— sem local —'})}</select></div>
+        opcoesLocal(+PREFS.local || null, {vazio: '— sem local —'})}</select></div>
       <div class="field"><label>Embalagem</label>
-        <label class="tog on" id="xCaixaChip" style="align-self:flex-start">
-          <input type="checkbox" id="xCaixa" checked>${CAIXA_MINI} vem na caixa</label></div>
+        <label class="tog${PREFS.caixa ? ' on' : ''}" id="xCaixaChip" style="align-self:flex-start">
+          <input type="checkbox" id="xCaixa"${PREFS.caixa ? ' checked' : ''}>${CAIXA_MINI} vem na caixa</label></div>
     </div>
     <div class="field" style="margin-top:12px"><label>Bobine — cor e imagem</label>
       <div class="previa" id="xPrev"></div>
-      ${p.imagem ? `<div class="row" style="margin-top:8px"><label class="tog" id="xIconeTog">
-        <input type="checkbox" id="xIcone">${BOBINA_MINI} desenhar em vez da foto</label></div>` : ''}
+      ${p.imagem ? `<div class="row" style="margin-top:8px"><label class="tog${PREFS.desenhar ? ' on' : ''}" id="xIconeTog">
+        <input type="checkbox" id="xIcone"${PREFS.desenhar ? ' checked' : ''}>${BOBINA_MINI} desenhar em vez da foto</label></div>` : ''}
       ${pickerHTML('add', '')}</div>
     <div class="row" style="margin-top:14px">
       <button class="primary" id="xOk">Adicionar ao inventário</button>
@@ -1319,6 +1421,9 @@ async function adicionaDeLoja(p) {
       + `<div class="sub">${hexEscolhido ? 'cor escolhida' : (corDe(nome) ? 'cor lida de <b>' + esc(nome) + '</b>' : 'sem cor reconhecida')}
          <br>${esc(c)}${p.imagem ? (usaFoto ? ' · fica a foto da loja' : ' · fica o desenho') : ''}</div>`;
   };
+  // a loja onde se comprou começa na que foi pesquisada, mas pode trocar-se:
+  // às vezes vê-se o produto numa e compra-se noutra
+  const xLojaLe = ligaLoja(dlg, '#xLoja', '#xLojaTxt', p.loja);
   const leHex = ligaPicker(dlg, 'add', v => { hexEscolhido = v; desenha(); });
   dlg.querySelector('#xCaixa').onchange = e =>
     dlg.querySelector('#xCaixaChip').classList.toggle('on', e.target.checked);
@@ -1326,6 +1431,68 @@ async function adicionaDeLoja(p) {
   if (togIc) togIc.onchange = () => {
     dlg.querySelector('#xIconeTog').classList.toggle('on', togIc.checked); desenha();
   };
+  /* O anúncio é de 1 kg mas a bobine que se tem é de 250 g? Mudando o peso, o
+     preço acompanha na proporção. É uma ESTIMATIVA e diz-se que é: as bobines
+     pequenas costumam sair bem mais caras por quilo. Só mexe enquanto o preço
+     não for escrito à mão -- a partir daí manda quem escreveu. */
+  const precoAnuncio = (p.preco != null) ? +p.preco : null;
+  const pesoAnuncio = +p.peso_g || 0;
+  let precoTocado = false;
+  const nota = dlg.querySelector('#xPrecoNota');
+  const campoPreco = dlg.querySelector('#xPreco');
+  campoPreco.addEventListener('input', () => { precoTocado = true; nota.textContent = ''; });
+  const ajustaPreco = () => {
+    const novo = +dlg.querySelector('#xPeso').value || 0;
+    if (precoTocado || !precoAnuncio || !pesoAnuncio || !novo) return;
+    if (novo === pesoAnuncio) {
+      campoPreco.value = precoAnuncio; nota.textContent = '';
+      return;
+    }
+    campoPreco.value = (precoAnuncio * novo / pesoAnuncio).toFixed(2);
+    nota.innerHTML = `estimado a partir de ${eur(precoAnuncio)} por ${
+      pesoAnuncio >= 1000 ? pesoAnuncio / 1000 + ' kg' : pesoAnuncio + ' g'
+    } · <a href="#" id="xProcuraPreco">procurar o preço real</a>`;
+    const lnk = dlg.querySelector('#xProcuraPreco');
+    if (lnk) lnk.onclick = ev => { ev.preventDefault(); procuraPrecoPeso(novo); };
+  };
+
+  /* Procura mesmo nas lojas por essa gramagem, em vez de estimar. */
+  async function procuraPrecoPeso(gramas) {
+    const v = id => dlg.querySelector(id).value;
+    const rotulo = gramas >= 1000 ? (gramas / 1000) + 'kg' : gramas + 'g';
+    /* De propósito SEM o peso na pesquisa: a Evolt exige que todos os termos
+       casem, e "250g" nunca casa num produto de 300 g -- pedir a gramagem
+       devolvia zero em vez de devolver as gramagens que existem. Pede-se o
+       produto e ordena-se depois por proximidade ao peso que se quer. */
+    const termo = [v('#xMarca'), v('#xMat'), v('#xCor')].filter(Boolean).join(' ');
+    nota.textContent = 'a procurar ' + rotulo + '…';
+    try {
+      const r = await api('/api/lojas/busca?q=' + encodeURIComponent(termo));
+      /* Exigir relevância alta: uma pesquisa por "Winkle PETG Glacier White
+         250g" trazia um "Mini 250 g Filament Bundle" da Elegoo só por causa do
+         peso -- com 0.20 de relevância. E não se exige a gramagem exacta: se
+         não houver 250 g mas houver 300 g, isso interessa na mesma, desde que
+         o peso vá dito ao lado para se poder julgar. */
+      const bons = (r.resultados || [])
+        .filter(x => x.preco && x.peso_g && x.relevancia >= 0.75)
+        .sort((a, b) => Math.abs(a.peso_g - gramas) - Math.abs(b.peso_g - gramas));
+      if (!bons.length) { nota.textContent = 'nenhuma loja tem isto à venda agora'; return; }
+      const rot = g => g >= 1000 ? (g / 1000) + ' kg' : g + ' g';
+      nota.innerHTML = 'à venda: ' + bons.slice(0, 4).map((x, i) =>
+        `<a href="#" data-pp="${i}">${esc(x.loja_nome)} ${rot(x.peso_g)} ${eur(x.preco)}</a>`).join(' · ');
+      nota.querySelectorAll('[data-pp]').forEach(a => a.onclick = ev => {
+        ev.preventDefault();
+        const x = bons[+a.dataset.pp];
+        campoPreco.value = x.preco; precoTocado = true;
+        dlg.querySelector('#xPeso').value = x.peso_g;   // o peso é o do produto escolhido
+        cheio();
+        const sel = dlg.querySelector('#xLoja');
+        if (sel && [...sel.options].some(o => o.value === x.loja)) sel.value = x.loja;
+        nota.textContent = `${x.loja_nome} · ${rot(x.peso_g)} · ${eur(x.preco)}`;
+      });
+    } catch (e) { nota.textContent = e.message; }
+  }
+
   /* Com UMA bobine dá para dizer já quanto resta e despachar a catalogação sem
      abrir o detalhe. Com várias esconde-se: não se sabe qual delas é qual. */
   const qtd = dlg.querySelector('#xQtd'), rest = dlg.querySelector('#xRest');
@@ -1333,7 +1500,10 @@ async function adicionaDeLoja(p) {
   const cheio = () => { rest.max = +peso.value || ''; if (+rest.value > +peso.value) rest.value = peso.value; };
   const soUma = () => { dlg.querySelector('#xRestWrap').hidden = +qtd.value !== 1; };
   qtd.oninput = soUma;
-  peso.addEventListener('input', () => { if (rest.value === '' || +rest.value === 0) rest.value = peso.value; cheio(); });
+  peso.addEventListener('input', () => {
+    if (rest.value === '' || +rest.value === 0) rest.value = peso.value;
+    cheio(); ajustaPreco();
+  });
   rest.oninput = cheio;
   soUma(); cheio();
   dlg.querySelector('#xCor').addEventListener('input', desenha);
@@ -1341,20 +1511,25 @@ async function adicionaDeLoja(p) {
   dlg.querySelector('#xOk').onclick = async () => {
     const v = id => dlg.querySelector(id).value;
     try {
-      await api('/api/adicionar', {method: 'POST', body: JSON.stringify({
+      const r = await api('/api/adicionar', {method: 'POST', body: JSON.stringify({
         filamento: {marca: v('#xMarca'), material: v('#xMat'), cor: v('#xCor'),
                     cor_hex: leHex(), peso_g: +v('#xPeso') || 1000,
-                    url: p.url, imagem: p.imagem, loja: p.loja, ref: p.ref || '', seguir: 1,
+                    url: p.url, imagem: p.imagem, loja: p.loja, ref: p.ref || '',
+                    diametro: +PREFS.diametro || 1.75, seguir: PREFS.seguir ? 1 : 0,
                     icone: (dlg.querySelector('#xIcone') || {}).checked ? 1 : 0},
         bobine: {local_id: +v('#xLocal') || null, preco: +v('#xPreco') || 0,
                  caixa: dlg.querySelector('#xCaixa').checked ? 1 : 0,
+                 estado: PREFS.estado,
                  // só faz sentido com uma bobine: a várias, não se sabe qual é qual
                  ...(+v('#xQtd') === 1 ? {restante_g: +v('#xRest') || 0} : {}),
-                 comprado_loja: p.loja, comprado_url: p.url, estado: 'selado',
-                 comprado_em: new Date().toISOString().slice(0, 10)},
+                 comprado_loja: xLojaLe(), comprado_url: p.url,
+                 comprado_em: v('#xData') || new Date().toISOString().slice(0, 10)},
         quantidade: +v('#xQtd') || 1,
       })});
-      dlg.close(); await carrega(); toast('adicionado ao inventário');
+      dlg.close(); await carrega();
+      // dizer que juntou, senão parece que a bobine não entrou
+      toast(r.juntou ? `juntei a "${r.juntou}" — ficas com ${r.total_bobines} bobines`
+                     : 'adicionado ao inventário', 4000);
     } catch (e) { toast(e.message); }
   };
 }
@@ -1550,8 +1725,41 @@ async function listaPlanos() {
 
 /* ============================ definições ============================ */
 let DEF = null;
+/* Preferências de quem usa, vindas do servidor. Ficam lá e não no browser
+   porque decidem o que é GRAVADO, não como se vê -- têm de valer no telemóvel e
+   no computador. Até chegarem, valem estas. */
+let PREFS = {caixa: true, desenhar: false, seguir: true, estado: 'selado', diametro: 1.75, local: 0};
 async function desenhaDef() {
   DEF = await api('/api/definicoes');
+  if (DEF.preferencias) PREFS = {...PREFS, ...DEF.preferencias};
+  /* O formulário manual é montado no arranque, antes de as preferências
+     chegarem do servidor; quando chegam, aplicam-se-lhe. */
+  if ($('#mCaixa')) {
+    $('#mCaixa').checked = !!PREFS.caixa;
+    $('#mCaixaChip').classList.toggle('on', !!PREFS.caixa);
+    $('#mEstado').value = PREFS.estado || 'selado';
+    if (+PREFS.local && $('#mLocal').querySelector(`option[value="${+PREFS.local}"]`))
+      $('#mLocal').value = +PREFS.local;
+  }
+  $('#prefsTogs').innerHTML = [
+    ['caixa', CAIXA_MINI + ' vem na caixa'],
+    ['desenhar', BOBINA_MINI + ' desenhar em vez da foto'],
+    ['seguir', 'seguir os preços'],
+  ].map(([k, t]) => `<label class="tog${PREFS[k] ? ' on' : ''}" data-pref="${k}">
+      <input type="checkbox" ${PREFS[k] ? 'checked' : ''}>${t}</label>`).join('');
+  $$('#prefsTogs [data-pref]').forEach(l => {
+    const cb = l.querySelector('input');
+    cb.onchange = () => { PREFS[l.dataset.pref] = cb.checked; l.classList.toggle('on', cb.checked); };
+  });
+  $('#prefsCampos').innerHTML = `
+    <div class="field"><label>Estado inicial</label><select id="prefEstado">
+      ${['selado', 'aberto'].map(e => `<option${e === PREFS.estado ? ' selected' : ''}>${e}</option>`).join('')}
+    </select></div>
+    <div class="field"><label>Diâmetro</label><select id="prefDiam">
+      ${[1.75, 2.85].map(d => `<option${d == PREFS.diametro ? ' selected' : ''}>${d}</option>`).join('')}
+    </select></div>
+    <div class="field"><label>Local por omissão</label>
+      <select id="prefLocal">${opcoesLocal(+PREFS.local || null, {vazio: '— nenhum —'})}</select></div>`;
   $('#chaves').innerHTML = Object.entries(DEF.fornecedores).map(([k, v]) => `
     <div class="field"><label>${esc(v.nome)}${v.tem ? ` — guardada (…${esc(v.fim)})` : ''}</label>
       <input type="password" data-key="${esc(k)}" placeholder="${v.tem ? 'deixa vazio para manter' : 'colar chave'}"></div>`).join('')
@@ -1570,6 +1778,7 @@ async function desenhaDef() {
 
 /* O selector do formulário manual é montado uma vez, quando a app abre. */
 let mHex = () => '';
+let mLojaLe = () => '';
 function montaPickerManual() {
   $('#mPicker').innerHTML = pickerHTML('man', '');
   const prev = $('#mPrev');
@@ -1584,6 +1793,10 @@ function montaPickerManual() {
   };
   mHex = ligaPicker(document, 'man', v => { escolhido = v; desenha(); });
   $('#mCaixaChip').querySelector('.cxglifo').innerHTML = CAIXA_MINI;
+  $('#mData').value = new Date().toISOString().slice(0, 10);
+  $('#mCaixa').checked = !!PREFS.caixa;
+  $('#mCaixaChip').classList.toggle('on', !!PREFS.caixa);
+  $('#mEstado').value = PREFS.estado || 'selado';
   $('#mCaixa').onchange = e => $('#mCaixaChip').classList.toggle('on', e.target.checked);
   /* mesma ideia do diálogo da loja: com uma só bobine diz-se já quanto resta */
   const soUmaM = () => { $('#mRestWrap').hidden = +$('#mQtd').value !== 1; };
@@ -1606,6 +1819,10 @@ async function carrega() {
   $('#resumoTopo').textContent =
     `${INV.filamentos.length} filamentos · ${bs.length} bobines · ${kg.toFixed(1)} kg armazenados`;
   $('#ver').textContent = 'v' + (INV.versao || '');
+  // o select de "onde comprei" só se pode montar depois de o servidor dizer que
+  // lojas conhece, por isso é aqui e não no arranque
+  $('#mLoja').innerHTML = opcoesLoja('');
+  mLojaLe = ligaLoja(document, '#mLoja', '#mLojaTxt', '');
   desenhaLista(); desenhaChips(); desenhaPrecos(); desenhaLocais(); desenhaLojas();
 }
 
@@ -1676,18 +1893,22 @@ $('#mAdd').onclick = async () => {
   const v = id => $(id).value;
   if (!v('#mMarca') && !v('#mMat') && !v('#mCor')) return toast('dá-lhe pelo menos marca, material ou cor');
   try {
-    await api('/api/adicionar', {method: 'POST', body: JSON.stringify({
+    const r = await api('/api/adicionar', {method: 'POST', body: JSON.stringify({
       filamento: {marca: v('#mMarca'), material: v('#mMat'), cor: v('#mCor'), cor_hex: mHex(),
-                  peso_g: +v('#mPeso') || 1000, seguir: 1},
+                  peso_g: +v('#mPeso') || 1000, diametro: +PREFS.diametro || 1.75,
+                  seguir: PREFS.seguir ? 1 : 0},
       bobine: {local_id: +v('#mLocal') || null, preco: +v('#mPreco') || 0, estado: v('#mEstado'),
                caixa: $('#mCaixa').checked ? 1 : 0,
                ...(+v('#mQtd') === 1 ? {restante_g: +v('#mRest') || 0} : {}),
-               comprado_em: new Date().toISOString().slice(0, 10)},
+               comprado_loja: mLojaLe(),
+               comprado_em: v('#mData') || new Date().toISOString().slice(0, 10)},
       quantidade: +v('#mQtd') || 1,
     })});
     ['#mMarca', '#mMat', '#mCor', '#mPreco'].forEach(i => $(i).value = '');
     $('#mRest').value = $('#mPeso').value;
-    await carrega(); toast('adicionado');
+    await carrega();
+    toast(r.juntou ? `juntei a "${r.juntou}" — ficas com ${r.total_bobines} bobines`
+                   : 'adicionado', 4000);
   } catch (e) { toast(e.message); }
 };
 $('#lAdd').onclick = async () => {
@@ -1718,6 +1939,13 @@ $('#aPreview').onclick = async () => {
     if (r.erro) toast(r.erro, 6000); else desenhaPlano(r.plano_id, r.plano);
   } catch (e) { toast(e.message, 6000); }
   finally { b.disabled = false; b.textContent = 'Preview'; }
+};
+$('#prefsSave').onclick = async () => {
+  PREFS.estado = $('#prefEstado').value;
+  PREFS.diametro = +$('#prefDiam').value || 1.75;
+  PREFS.local = +$('#prefLocal').value || 0;
+  try { await api('/api/definicoes', {method: 'PATCH', body: JSON.stringify({preferencias: PREFS})});
+        toast('guardado'); } catch (e) { toast(e.message); }
 };
 $('#dSave').onclick = async () => {
   const corpo = {fornecedor: $('#dForn').value};

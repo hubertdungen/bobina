@@ -46,6 +46,13 @@ impressão 3D com modificadores (`dark`, `pastel`, `neon`, `matte`, `silk`), e a
 cores compostas misturam-se. Dá para escolher à mão por amostra ou por roda RGB,
 e voltar ao automático quando se quiser.
 
+**Compras.** Cada bobine guarda onde foi comprada (as seis lojas ou outra
+qualquer, à mão), por quanto e quando. O cartão mostra o **€/kg médio** —
+ponderado pelo peso, porque a mesma referência pode ter sido comprada em alturas
+e lojas diferentes. Adicionar uma bobine que já existe **junta-a ao grupo**: a
+comparação é por significado e não por letras, por isso a mesma bobine comprada
+como "Black" numa loja e "Preto" noutra fica no mesmo sítio.
+
 **Vistas.** A lista mostra-se seguida ou agrupada por **local**, **marca**,
 **material** ou **cor**, com sub-ordenação (nome, mais filamento, mais bobines,
 adicionado há menos). A escolha fica guardada. No agrupamento por cor, "Jet
