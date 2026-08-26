@@ -555,20 +555,27 @@ function bobinaSVG(cor, tam, transp) {
    cantos redondos -- o mesmo recorte das fotos das lojas. Desenhar uma caixa de
    cartão a sério era ruído: quem quiser a palavra tem o indicador "na caixa"
    logo por baixo. */
-function caixaSVG(cor, tam, transp) {
+function caixaSVG(cor, tam, transp, tracejado) {
   const linha = visivel(cor || NEUTRA);
   const dentro = bobinaSVG(cor, tam, transp)
     .replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+  // tracejado = umas bobines têm caixa e outras não; a moldura fica meio posta
+  const traco = tracejado ? ' stroke-dasharray="5 4.5" stroke-linecap="round"' : '';
   return `<svg class="bob" viewBox="0 0 48 48" width="${tam}" height="${tam}" aria-hidden="true">
     <rect x="2.4" y="2.4" width="43.2" height="43.2" rx="9.5" fill="none"
-          stroke="${linha}" stroke-width="1.7" opacity=".6"/>
+          stroke="${linha}" stroke-width="1.7" opacity="${tracejado ? '.75' : '.6'}"${traco}/>
     <g transform="translate(24 24) scale(.72) translate(-24 -24)">${dentro}</g>
   </svg>`;
 }
 const temCaixa = b => !!(+b.caixa);
-/* Uma miniatura só chega para um estado: mostra-se caixa quando TODAS as
-   bobines ainda a têm. Havendo mistura, manda a bobine e a conta vai ao lado. */
-const todasNaCaixa = bs => bs.length > 0 && bs.every(temCaixa);
+/* Três estados, porque um filamento pode ter umas bobines ainda na caixa e
+   outras já abertas: sem moldura, moldura inteira, e moldura a tracejado para a
+   mistura -- que é a informação que faltava quando se via só "2 na caixa". */
+function estadoCaixa(bs) {
+  const n = bs.filter(temCaixa).length;
+  if (!bs.length || !n) return 'nenhuma';
+  return n === bs.length ? 'todas' : 'algumas';
+}
 const BOBINA_MINI = `<svg viewBox="0 0 48 48" width="13" height="13" style="vertical-align:-2px"
   fill="none" stroke="currentColor" stroke-width="3.4" aria-hidden="true">
   <circle cx="24" cy="24" r="19"/><circle cx="24" cy="24" r="6.5"/></svg>`;
@@ -584,8 +591,10 @@ const corDoFil = f => f.cor_hex || corDe(f.cor) || NEUTRA;
    partido do browser. */
 const fotoURL = u => '/api/imagem?u=' + encodeURIComponent(u);
 function media(f, tam, bs) {
-  const desenho = (todasNaCaixa(bs || vivas(f)) ? caixaSVG : bobinaSVG)(
-    corDoFil(f), tam, eTransparente(f.cor));
+  const est = estadoCaixa(bs || vivas(f));
+  const desenho = est === 'nenhuma'
+    ? bobinaSVG(corDoFil(f), tam, eTransparente(f.cor))
+    : caixaSVG(corDoFil(f), tam, eTransparente(f.cor), est === 'algumas');
   if (!f.icone && f.imagem) {
     const alt = desenho.replace(/"/g, '&quot;');
     return `<img class="foto" src="${esc(fotoURL(f.imagem))}" width="${tam}" height="${tam}"
@@ -869,8 +878,14 @@ async function abreFilamento(fid) {
     <h2>${esc([f.marca, f.material, f.cor].filter(Boolean).join(' ') || 'filamento')}</h2>
     <div class="sub" style="margin-bottom:12px">${esc(f.peso_g)} g · ⌀${esc(f.diametro)} mm${f.ref ? ' · ref ' + esc(f.ref) : ''}</div>
     <div class="previa" id="fPrev"></div>
-    <div class="field" style="margin-top:10px"><label>Cor (nome)</label>
-      <input id="fCor" value="${esc(f.cor || '')}" placeholder="ex.: Ocean Blue, wood ash, silk red"></div>
+    <div class="grid c4" style="gap:8px;margin-top:10px">
+      <div class="field"><label>Marca</label><input id="fMarca" value="${esc(f.marca || '')}"></div>
+      <div class="field"><label>Material</label><input id="fMat" value="${esc(f.material || '')}"></div>
+      <div class="field"><label>Cor (nome)</label>
+        <input id="fCor" value="${esc(f.cor || '')}" placeholder="ex.: Ocean Blue, wood ash"></div>
+      <div class="field"><label>Bobine cheia (g)</label>
+        <input id="fPeso" type="number" min="0" step="10" value="${f.peso_g ?? 1000}"></div>
+    </div>
     ${pickerHTML('det', f.cor_hex || '')}
     ${f.imagem ? `<div class="row" style="margin-top:10px">
       <label class="tog" id="fIconeTog"><input type="checkbox" id="fIcone" ${f.icone ? 'checked' : ''}>
@@ -913,14 +928,36 @@ async function abreFilamento(fid) {
     const nome = dlg.querySelector('#fCor').value;
     const c = hexDet || corDe(nome) || NEUTRA;
     const marcadas = [...dlg.querySelectorAll('[data-k="caixa"]')];
-    const naCaixa = marcadas.length > 0 && marcadas.every(x => x.checked);
+    const comCaixa = marcadas.filter(x => x.checked).length;
+    const estCx = !marcadas.length || !comCaixa ? 'nenhuma'
+                : (comCaixa === marcadas.length ? 'todas' : 'algumas');
     const usaFoto = f.imagem && !(dlg.querySelector('#fIcone') || {}).checked;
     prevDet.innerHTML = (f.imagem ? `<img class="foto" src="${esc(fotoURL(f.imagem))}" width="46" height="46"
         alt="" style="opacity:${usaFoto ? 1 : .35}">` : '')
-      + (naCaixa ? caixaSVG : bobinaSVG)(c, 46, eTransparente(nome))
+      + (estCx === 'nenhuma' ? bobinaSVG(c, 46, eTransparente(nome))
+                             : caixaSVG(c, 46, eTransparente(nome), estCx === 'algumas'))
       + `<div class="sub">${hexDet ? 'cor escolhida' : (corDe(nome) ? 'cor lida do nome' : 'sem cor reconhecida')}
          <br>${esc(c)}${f.imagem ? (usaFoto ? ' · mostra a foto' : ' · mostra o desenho') : ''}</div>`;
   };
+  /* Mudar aqui o peso do filamento tem de mexer JÁ nos campos das bobines que
+     ainda estavam no peso antigo. O servidor arrasta-as, mas os campos deste
+     ecrã foram desenhados antes e seriam gravados a seguir por cima, desfazendo
+     o arrasto. As que já foram pesadas à mão ficam quietas, aqui como lá. */
+  let pesoAntigo = +dlg.querySelector('#fPeso').value || 0;
+  dlg.querySelector('#fPeso').addEventListener('change', () => {
+    const novo = +dlg.querySelector('#fPeso').value || 0;
+    if (!novo || novo === pesoAntigo) return;
+    dlg.querySelectorAll('[data-b]').forEach(c => {
+      const pz = c.querySelector('[data-k="peso_liquido_g"]');
+      const rt = c.querySelector('[data-k="restante_g"]');
+      if (+pz.value === pesoAntigo) {
+        pz.value = novo;
+        if (+rt.value > novo) rt.value = novo;
+        pz.dispatchEvent(new Event('input'));
+      }
+    });
+    pesoAntigo = novo;
+  });
   const leHexDet = ligaPicker(dlg, 'det', v => { hexDet = v; desenhaDet(); });
   dlg.querySelector('#fCor').addEventListener('input', desenhaDet);
   const togIcone = dlg.querySelector('#fIcone');
@@ -997,7 +1034,10 @@ async function abreFilamento(fid) {
   });
   dlg.querySelector('#dSalvar').onclick = async () => {
     await api('/api/filamentos/' + fid, {method: 'PATCH', body: JSON.stringify({
+      marca: dlg.querySelector('#fMarca').value.trim(),
+      material: dlg.querySelector('#fMat').value.trim(),
       cor: dlg.querySelector('#fCor').value,
+      peso_g: +dlg.querySelector('#fPeso').value || 0,
       cor_hex: leHexDet(),
       icone: (dlg.querySelector('#fIcone') || {}).checked ? 1 : 0,
     })});
@@ -1080,8 +1120,14 @@ function adivinha(titulo) {
     arr.sort((a, b) => (b.unico - a.unico) || (b.t.length - a.t.length));
     return arr[0].c;
   };
-  const achado = {marca: escolhe(cand.marca), material: escolhe(cand.material).toUpperCase(),
-                  cor: escolhe(cand.cor)};
+  const marca = escolhe(cand.marca);
+  const achado = {
+    // a chave do léxico é minúscula porque é assim que se compara; para mostrar
+    // usa-se a forma como a marca escreve o próprio nome
+    marca: (LEX.marcas_nome && LEX.marcas_nome[marca]) || marca,
+    material: escolhe(cand.material).toUpperCase(),
+    cor: escolhe(cand.cor),
+  };
   // o nome como a loja o escreve ganha ao canónico: "Ocean Blue" > "azul"
   const frase = corFrase(titulo);
   if (frase) achado.cor = frase;

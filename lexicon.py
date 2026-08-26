@@ -139,6 +139,34 @@ MARCAS: dict[str, list[str]] = {
     "corexy": ["corexy", "core xy"],
 }
 
+
+# ---------------------------------------------------------- nomes das marcas --
+# As chaves de MARCAS são minúsculas e sem espaços porque é assim que se compara.
+# Para MOSTRAR não servem: ninguém escreve "azurefilm" nem "bambulab". Esta tabela
+# é a forma como cada marca escreve o seu próprio nome.
+MARCAS_NOME: dict[str, str] = {
+    "azurefilm": "AzureFilm", "esun": "eSUN", "sunlu": "SUNLU",
+    "polymaker": "Polymaker", "prusa": "Prusament", "bambulab": "Bambu Lab",
+    "spectrum": "Spectrum", "elegoo": "ELEGOO", "qidi": "QIDI",
+    "creality": "Creality", "anycubic": "Anycubic", "extrudr": "Extrudr",
+    "fillamentum": "Fillamentum", "3djake": "3DJAKE", "eryone": "Eryone",
+    "overture": "Overture", "devildesign": "Devil Design", "fiberlogy": "Fiberlogy",
+    "fiberthree": "Fiberthree", "colorfabb": "colorFabb", "formfutura": "FormFutura",
+    "filamentpm": "Filament PM", "rosa3d": "Rosa3D", "printme": "Print-Me",
+    "nobufil": "Nobufil", "addnorth": "Add:North", "verbatim": "Verbatim",
+    "kimya": "Kimya", "recreus": "Recreus", "smartfil": "Smartfil",
+    "filoalfa": "FiloAlfa", "treed": "TreeD", "kexcelled": "Kexcelled",
+    "geeetech": "Geeetech", "amolen": "AMOLEN", "hatchbox": "HATCHBOX",
+    "flashforge": "FlashForge", "kingroon": "Kingroon", "tinmorry": "TINMORRY",
+    "jayo": "JAYO", "ziro": "ZIRO", "torwell": "Torwell", "iemai": "IEMAI",
+    "ultimaker": "UltiMaker", "raise3d": "Raise3D", "ninjatek": "NinjaTek",
+    "matterhackers": "MatterHackers", "protopasta": "Proto-pasta",
+    "sainsmart": "SainSmart", "winkle": "Winkle", "herz": "Herz",
+    "noctuo": "Noctuo", "realfilament": "Real Filament", "francofil": "Francofil",
+    "filaticum": "Filaticum", "gembird": "Gembird", "dasfilament": "Das Filament",
+    "filamentworld": "FilamentWorld", "evolt": "Evolt", "corexy": "Core XY",
+}
+
 MATERIAIS: dict[str, list[str]] = {
     "pla": ["pla", "pla+", "pla plus", "plaplus", "pla pro", "tough pla", "ecopla", "ingeo",
             "hf pla", "high speed pla", "pla basic", "pla matte", "pla silk", "pla meta",
@@ -404,6 +432,7 @@ def payload() -> dict:
                    for g, t in GRUPOS.items()},
         "index": build_index(),
         "hex": {norm(k): v for k, v in CORES_HEX.items()},
+        "marcas_nome": MARCAS_NOME,
         "modif": {norm(k): v for k, v in MODIF_COR.items()},
     }
 
