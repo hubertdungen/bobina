@@ -653,6 +653,40 @@ function caminhoLocal(id) {
   while (l && guarda++ < 12) { partes.unshift(l.nome); l = LOC[l.pai_id]; }
   return partes.join(' › ');
 }
+/* Ordenar locais pela raiz primeiro e só depois pelo nome. Comparar o caminho
+   inteiro como texto quase chega, mas tropeça em nomes que são prefixo uns dos
+   outros; comparar a cadeia de antepassados nome a nome não tropeça, e garante
+   que o pai vem sempre antes dos filhos. */
+function cadeiaLocal(id) {
+  const partes = [];
+  let l = LOC[id], g = 0;
+  while (l && g++ < 12) { partes.unshift((l.nome || '').toLocaleLowerCase('pt')); l = LOC[l.pai_id]; }
+  return partes;
+}
+function cmpLocal(a, b) {
+  const A = cadeiaLocal(a), B = cadeiaLocal(b);
+  for (let i = 0; i < Math.max(A.length, B.length); i++) {
+    if (A[i] === undefined) return -1;
+    if (B[i] === undefined) return 1;
+    const c = A[i].localeCompare(B[i], 'pt');
+    if (c) return c;
+  }
+  return 0;
+}
+/* As opções de um <select> de local: agrupadas pela raiz, indentadas pela
+   profundidade e com o nome só do próprio -- o caminho inteiro repetido em cada
+   linha tornava a lista ilegível assim que houvesse dois níveis. */
+function opcoesLocal(seleccionado, {excluir = null, vazio = ''} = {}) {
+  const lista = INV.locais.filter(l => !excluir || !excluir.has(l.id)).sort((a, b) => cmpLocal(a.id, b.id));
+  return (vazio ? `<option value="">${esc(vazio)}</option>` : '')
+    + lista.map(l => {
+      const nivel = Math.max(0, cadeiaLocal(l.id).length - 1);
+      const recuo = '\u00a0\u00a0\u00a0'.repeat(nivel);
+      return `<option value="${l.id}"${l.id === seleccionado ? ' selected' : ''}
+        >${recuo}${nivel ? '· ' : ''}${esc(l.nome)}</option>`;
+    }).join('');
+}
+
 function reindexa() {
   FIL = {}; LOC = {}; PORLOC = {}; HAY = {};
   INV.locais.forEach(l => LOC[l.id] = l);
@@ -830,8 +864,7 @@ function desenhaChips() {
 async function abreFilamento(fid) {
   const f = FIL[fid]; if (!f) return;
   const bs = (PORLOC[fid] || []);
-  const opts = l => INV.locais.map(x =>
-    `<option value="${x.id}"${x.id === l ? ' selected' : ''}>${esc(caminhoLocal(x.id))}</option>`).join('');
+  const opts = l => opcoesLocal(l, {vazio: '— sem local —'});
   const precos = (INV.precos[fid] || []).sort((a, b) => (a.preco_kg || a.preco) - (b.preco_kg || b.preco));
   const dlg = document.createElement('dialog');
   dlg.innerHTML = `<div class="dlg">
@@ -1072,7 +1105,7 @@ async function adicionaDeLoja(p) {
       <div class="field" id="xRestWrap"><label>Restante (g)</label>
         <input id="xRest" type="number" min="0" step="10" value="${p.peso_g || 1000}"></div>
       <div class="field"><label>Onde fica</label><select id="xLocal">${
-        INV.locais.map(l => `<option value="${l.id}">${esc(caminhoLocal(l.id))}</option>`).join('')}</select></div>
+        opcoesLocal(null, {vazio: '— sem local —'})}</select></div>
       <div class="field"><label>Embalagem</label>
         <label class="tog on" id="xCaixaChip" style="align-self:flex-start">
           <input type="checkbox" id="xCaixa" checked>${CAIXA_MINI} vem na caixa</label></div>
@@ -1189,11 +1222,7 @@ function desenhaLocais() {
      um anel. O servidor também recusa, mas nem sequer se oferece a hipótese. */
   const opcoesPai = l => {
     const proibidos = descendentes(l.id); proibidos.add(l.id);
-    return '<option value="">— raiz —</option>' + INV.locais
-      .filter(x => !proibidos.has(x.id))
-      .sort((a, b) => caminhoLocal(a.id).localeCompare(caminhoLocal(b.id), 'pt'))
-      .map(x => `<option value="${x.id}"${x.id === l.pai_id ? ' selected' : ''}>${esc(caminhoLocal(x.id))}</option>`)
-      .join('');
+    return opcoesLocal(l.pai_id, {excluir: proibidos, vazio: '— raiz —'});
   };
   const TIPOS = ['sala', 'estante', 'prateleira', 'caixa', 'gaveta', 'impressora', 'outro'];
 
@@ -1253,11 +1282,8 @@ function desenhaLocais() {
     await carrega(); toast('local apagado');
   });
 
-  const sel = () => INV.locais.slice()
-    .sort((a, b) => caminhoLocal(a.id).localeCompare(caminhoLocal(b.id), 'pt'))
-    .map(l => `<option value="${l.id}">${esc(caminhoLocal(l.id))}</option>`).join('');
-  $('#lPai').innerHTML = '<option value="">(raiz)</option>' + sel();
-  $('#mLocal').innerHTML = '<option value="">(sem local)</option>' + sel();
+  $('#lPai').innerHTML = opcoesLocal(null, {vazio: '— raiz —'});
+  $('#mLocal').innerHTML = opcoesLocal(null, {vazio: '— sem local —'});
 }
 </script>
 <script>
