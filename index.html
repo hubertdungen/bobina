@@ -109,10 +109,9 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:12p
 .grupocab{display:flex;align-items:center;gap:9px;margin-bottom:9px;flex-wrap:wrap}
 .grupocab h3{margin:0;color:var(--txt);text-transform:none;font-size:14px;letter-spacing:0}
 .grupocab .via{color:var(--dim);font-size:11.5px;font-weight:500}
-.vista{display:flex;gap:0;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-left:auto}
-.vista button{border:none;border-radius:0;padding:5px 11px;font-size:11.5px;min-height:30px;
-  background:transparent;color:var(--dim)}
-.vista button.on{background:var(--accent);color:#160b33}
+.vista{display:flex;gap:6px;align-items:center;margin-left:auto}
+.vista select{width:auto;min-height:30px;padding:4px 8px;font-size:11.5px;border-radius:9px}
+.vista .lab{font-size:11px;color:var(--dim)}
 .spool.semstock{opacity:.62}
 .spool.semstock .swatch,.spool.semstock .bob,.spool.semstock .foto{filter:grayscale(.7)}
 
@@ -720,11 +719,8 @@ function resultados(q) {
   const termos = termosDe(q);
   let fs = INV.filamentos;
   if (termos.length) fs = fs.filter(f => casa(HAY[f.id] || '', termos));
-  return fs.sort((a, b) => {
-    const va = vivas(a).length, vb = vivas(b).length;
-    if (!!va !== !!vb) return vb - va;                       // o que existe primeiro
-    return (a.marca + a.material + a.cor).localeCompare(b.marca + b.material + b.cor, 'pt');
-  });
+  // a ordem é escolhida no menu (ordenaFilamentos); aqui só se filtra
+  return fs;
 }
 
 function realca(txt, termos) {
@@ -776,16 +772,60 @@ const PREF = {
   },
   poe(k, v) { try { localStorage.setItem('bobina.' + k, JSON.stringify(v)); } catch (e) {} },
 };
-let VISTA = PREF.ler('vista', 'seguido');          // 'seguido' | 'local'
+let VISTA = PREF.ler('vista', 'seguido');   // seguido | local | marca | material | cor
+let ORDEM = PREF.ler('ordem', 'nome');      // sub-ordenação dentro de cada grupo
 let VER_SEM_STOCK = PREF.ler('semstock', false);
 
-/* Vista agrupada: um filamento com bobines em dois sítios aparece nos dois, com
-   as contas de cada um -- somar tudo num cartão só escondia metade da resposta
-   à pergunta "onde é que isto está". */
+/* A cor canónica de um filamento: "Jet Black", "Preto" e "Traffic Black" caem
+   todos em "preto". É o que torna o agrupamento por cor útil -- agrupar pelo
+   texto cru dava um grupo por bobine. */
+function corCanonica(txt) {
+  for (const t of norm(txt || '').replace(/[-\/_+]/g, ' ').split(' ')) {
+    const h = (LEX.index[t] || []).find(x => x.g === 'cor');
+    if (h) return h.c;
+  }
+  return '';
+}
+const capitaliza = t => t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+
+/* Sub-ordenação dentro de cada grupo (e da lista seguida). */
+const ORDENADORES = {
+  nome: [(a, b) => (a.marca + ' ' + a.material + ' ' + a.cor)
+    .localeCompare(b.marca + ' ' + b.material + ' ' + b.cor, 'pt'), 'nome (A-Z)'],
+  restante: [(a, b) => restante(b) - restante(a), 'mais filamento'],
+  bobines: [(a, b) => vivas(b).length - vivas(a).length, 'mais bobines'],
+  recente: [(a, b) => (b.criado_em || 0) - (a.criado_em || 0), 'adicionado há menos'],
+};
+const VISTAS = {
+  seguido: 'tudo seguido', local: 'por local', marca: 'por marca',
+  material: 'por material', cor: 'por cor',
+};
+const CHAVE_GRUPO = {
+  marca: f => (f.marca || '').trim() || 'Sem marca',
+  material: f => (f.material || '').trim().toUpperCase() || 'Sem material',
+  cor: f => capitaliza(corCanonica(f.cor)) || 'Sem cor',
+};
+
+function ordenaFilamentos(fs) {
+  return fs.slice().sort(ORDENADORES[ORDEM] ? ORDENADORES[ORDEM][0] : ORDENADORES.nome[0]);
+}
+
+function cabecalhoGrupo(titulo, via, nb, cap, kg) {
+  return `<div class="grupocab">
+    <h3>${esc(titulo)}</h3>
+    ${via ? `<span class="via">em ${esc(via)}</span>` : ''}
+    <span class="pill${cap && nb >= cap ? ' bad' : (cap ? ' good' : '')}">${nb}${cap ? ' / ' + cap : ''}</span>
+    ${kg > 0 ? `<span class="via">${kg.toFixed(1)} kg</span>` : ''}
+  </div>`;
+}
+
+/* Vista agrupada por LOCAL: um filamento com bobines em dois sítios aparece nos
+   dois, com as contas de cada um -- somar tudo num cartão só escondia metade da
+   resposta à pergunta "onde é que isto está". */
 function porLocal(fs, termos) {
   const grupos = new Map();
   const poe = (k, f, bs) => { if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push({f, bs}); };
-  for (const f of fs) {
+  for (const f of ordenaFilamentos(fs)) {
     const bs = vivas(f);
     if (!bs.length) { poe(-1, f, []); continue; }
     const por = new Map();
@@ -798,9 +838,9 @@ function porLocal(fs, termos) {
   }
   const chaves = [...grupos.keys()].sort((a, b) => {
     if (a === b) return 0;
-    if (a === -1) return 1; if (b === -1) return -1;       // sem stock no fim
-    if (a === 0) return 1; if (b === 0) return -1;         // sem local logo antes
-    return caminhoLocal(a).localeCompare(caminhoLocal(b), 'pt');
+    if (a === -1) return 1; if (b === -1) return -1;
+    if (a === 0) return 1; if (b === 0) return -1;
+    return cmpLocal(a, b);
   });
   return chaves.map(k => {
     const itens = grupos.get(k);
@@ -810,15 +850,35 @@ function porLocal(fs, termos) {
     const l = LOC[k];
     const titulo = k === -1 ? 'Sem stock' : (k === 0 ? 'Sem local atribuído' : (l ? l.nome : 'local ' + k));
     const via = (k > 0 && l && l.pai_id && LOC[l.pai_id]) ? caminhoLocal(l.pai_id) : '';
-    const cap = (k > 0 && l) ? (l.capacidade || 0) : 0;
     return `<div class="grupo">
-      <div class="grupocab">
-        <h3>${esc(titulo)}</h3>
-        ${via ? `<span class="via">em ${esc(via)}</span>` : ''}
-        <span class="pill${cap && nb >= cap ? ' bad' : (cap ? ' good' : '')}">${nb}${cap ? ' / ' + cap : ''}</span>
-        ${k !== -1 ? `<span class="via">${kg.toFixed(1)} kg</span>` : ''}
-      </div>
+      ${cabecalhoGrupo(titulo, via, nb, (k > 0 && l) ? (l.capacidade || 0) : 0, k === -1 ? 0 : kg)}
       <div class="spools">${itens.map(i => cartao(i.f, termos, i.bs)).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+/* Vista agrupada por marca, material ou cor: aqui o filamento aparece uma vez só. */
+function porFaceta(fs, termos, faceta) {
+  const chave = CHAVE_GRUPO[faceta];
+  const grupos = new Map();
+  for (const f of ordenaFilamentos(fs)) {
+    const k = chave(f);
+    if (!grupos.has(k)) grupos.set(k, []);
+    grupos.get(k).push(f);
+  }
+  // grupos por ordem alfabética, mas os "Sem ..." vão para o fim
+  const chaves = [...grupos.keys()].sort((a, b) => {
+    const sa = a.startsWith('Sem '), sb = b.startsWith('Sem ');
+    if (sa !== sb) return sa ? 1 : -1;
+    return a.localeCompare(b, 'pt');
+  });
+  return chaves.map(k => {
+    const itens = grupos.get(k);
+    const nb = itens.reduce((a, f) => a + vivas(f).length, 0);
+    const kg = itens.reduce((a, f) => a + restante(f), 0) / 1000;
+    return `<div class="grupo">
+      ${cabecalhoGrupo(k, '', nb, 0, kg)}
+      <div class="spools">${itens.map(f => cartao(f, termos)).join('')}</div>
     </div>`;
   }).join('');
 }
@@ -835,10 +895,11 @@ function desenhaLista() {
 
   $('#qCnt').textContent = q ? String(fs.length) : '';
   $('#qClr').hidden = !q;
-  $('#lista').className = VISTA === 'local' ? '' : 'spools';
-  $('#lista').innerHTML = VISTA === 'local'
-    ? porLocal(fs, termos)
-    : fs.map(f => cartao(f, termos)).join('');
+  const agrupada = VISTA !== 'seguido';
+  $('#lista').className = agrupada ? '' : 'spools';
+  $('#lista').innerHTML = VISTA === 'local' ? porLocal(fs, termos)
+    : agrupada ? porFaceta(fs, termos, VISTA)
+    : ordenaFilamentos(fs).map(f => cartao(f, termos)).join('');
 
   const vazio = $('#vazio');
   vazio.hidden = fs.length > 0;
@@ -860,10 +921,16 @@ function desenhaChips() {
   $('#qChips').innerHTML = CHIPS.map(c =>
       `<span class="chip${termos.includes(norm(c)) ? ' on' : ''}" data-chip="${esc(c)}">${esc(c)}</span>`).join('')
     + (sem ? `<span class="chip${VER_SEM_STOCK ? ' on' : ''}" data-semstock="1">sem stock (${sem})</span>` : '')
-    + `<span class="vista" title="como mostrar a lista">
-        <button data-vista="seguido" class="${VISTA === 'seguido' ? 'on' : ''}">seguido</button>
-        <button data-vista="local" class="${VISTA === 'local' ? 'on' : ''}">por local</button>
+    + `<span class="vista">
+        <span class="lab">agrupar</span>
+        <select id="qVista" title="como agrupar a lista">${Object.entries(VISTAS).map(([k, t]) =>
+          `<option value="${k}"${k === VISTA ? ' selected' : ''}>${t}</option>`).join('')}</select>
+        <span class="lab">ordenar</span>
+        <select id="qOrdem" title="ordem dentro de cada grupo">${Object.entries(ORDENADORES).map(([k, v]) =>
+          `<option value="${k}"${k === ORDEM ? ' selected' : ''}>${v[1]}</option>`).join('')}</select>
       </span>`;
+  $('#qVista').onchange = e => { VISTA = e.target.value; PREF.poe('vista', VISTA); desenhaLista(); };
+  $('#qOrdem').onchange = e => { ORDEM = e.target.value; PREF.poe('ordem', ORDEM); desenhaLista(); };
 }
 </script>
 <script>
@@ -1576,8 +1643,6 @@ async function arranca() {
 $('#q').addEventListener('input', () => { desenhaLista(); desenhaChips(); });
 $('#qClr').onclick = () => { $('#q').value = ''; desenhaLista(); desenhaChips(); $('#q').focus(); };
 $('#qChips').addEventListener('click', e => {
-  const v = e.target.closest('[data-vista]');
-  if (v) { VISTA = v.dataset.vista; PREF.poe('vista', VISTA); desenhaLista(); desenhaChips(); return; }
   const ss = e.target.closest('[data-semstock]');
   if (ss) { VER_SEM_STOCK = !VER_SEM_STOCK; PREF.poe('semstock', VER_SEM_STOCK);
             desenhaLista(); desenhaChips(); return; }

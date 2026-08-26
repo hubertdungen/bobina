@@ -46,6 +46,12 @@ impressão 3D com modificadores (`dark`, `pastel`, `neon`, `matte`, `silk`), e a
 cores compostas misturam-se. Dá para escolher à mão por amostra ou por roda RGB,
 e voltar ao automático quando se quiser.
 
+**Vistas.** A lista mostra-se seguida ou agrupada por **local**, **marca**,
+**material** ou **cor**, com sub-ordenação (nome, mais filamento, mais bobines,
+adicionado há menos). A escolha fica guardada. No agrupamento por cor, "Jet
+Black", "Preto" e "Traffic Black" caem todos no mesmo grupo — agrupar pelo texto
+cru dava um grupo por bobine.
+
 **Arrumação.** Locais em árvore (sala › armário › prateleira › caixa) com
 capacidade, e a lista desenha essa árvore: o que está dentro de outro aparece
 encaixado lá dentro. Nome, tipo, capacidade e "dentro de" mudam-se a qualquer
