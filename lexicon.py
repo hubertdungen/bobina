@@ -10,6 +10,7 @@ porque é assim que são comparados. `norm()` faz a normalização dos dois lado
 """
 from __future__ import annotations
 
+import math
 import re
 import unicodedata
 
@@ -458,6 +459,157 @@ def expand(termo: str) -> set[str]:
         out.add(norm(hit["c"]))
         out.update(norm(a) for a in tabela[hit["c"]])
     return {o for o in out if o}
+
+
+# Cores que se veem através: a bobine desenhada leva menos opacidade. Mesma
+# lista da app (eTransparente no index.html) -- e é por isso que está aqui, para
+# a ponte do Fatia não inventar outra.
+_TRANSPARENTE = re.compile(r"transp|clear|natural|cristal|crystal|vidro|glass")
+
+
+def e_transparente(texto: str) -> bool:
+    return bool(_TRANSPARENTE.search(norm(texto or "")))
+
+
+# ------------------------------------------------ cor a partir do nome (hex) --
+# O MESMO algoritmo que o browser corre em corDe(): é ele que pinta a bobine
+# desenhada. Existe aqui em Python porque a ponte para o Fatia tem de mandar a
+# cor já resolvida -- do outro lado não há léxico nenhum, só o hex que sai
+# daqui. As tabelas continuam a ser uma só (CORES_HEX/MODIF_COR, acima); o que
+# se repete é a aritmética, não os dados.
+
+def _hex2rgb(h: str):
+    n = int(str(h).lstrip("#"), 16)
+    return ((n >> 16) & 255, (n >> 8) & 255, n & 255)
+
+
+def _rgb2hex(rgb) -> str:
+    # math.floor(v + .5) e nao round(): o round() do Python arredonda o meio
+    # para o par e o Math.round() do JS arredonda para cima -- com o round()
+    # a mistura dava um valor de diferenca do que a app desenha.
+    return "#" + "".join(f"{max(0, min(255, math.floor(v + 0.5))):02x}" for v in rgb)
+
+
+def _rgb2hsl(rgb):
+    r, g, b = (v / 255 for v in rgb)
+    mx, mn = max(r, g, b), min(r, g, b)
+    d = mx - mn
+    l = (mx + mn) / 2
+    s = 0.0 if d == 0 else d / (1 - abs(2 * l - 1))
+    h = 0.0
+    if d != 0:
+        if mx == r:
+            h = ((g - b) / d) % 6
+        elif mx == g:
+            h = (b - r) / d + 2
+        else:
+            h = (r - g) / d + 4
+        h *= 60
+        if h < 0:
+            h += 360
+    return [h, s, l]
+
+
+def _hsl2rgb(hsl):
+    h, s, l = hsl
+    c = (1 - abs(2 * l - 1)) * s
+    x = c * (1 - abs((h / 60) % 2 - 1))
+    m = l - c / 2
+    if h < 60:
+        t = (c, x, 0)
+    elif h < 120:
+        t = (x, c, 0)
+    elif h < 180:
+        t = (0, c, x)
+    elif h < 240:
+        t = (0, x, c)
+    elif h < 300:
+        t = (x, 0, c)
+    else:
+        t = (c, 0, x)
+    return [(v + m) * 255 for v in t]
+
+
+def _mistura(pares) -> str:
+    """Mistura pesada: uma frase de duas palavras ("pastel mint") diz mais sobre
+    a cor do que a palavra solta que vem a seguir ("green"), por isso pesa o
+    dobro. Sem isto, "Pastel Mint Green" saia verde chapado."""
+    total = sum(p[1] for p in pares) or 1
+    acc = [0.0, 0.0, 0.0]
+    for hexa, peso in pares:
+        c = _hex2rgb(hexa)
+        acc = [a + c[i] * peso / total for i, a in enumerate(acc)]
+    return _rgb2hex(acc)
+
+
+def _aplica_modif(hexa: str, m: str) -> str:
+    h, s, l = _rgb2hsl(_hex2rgb(hexa))
+    if m == "escurecer":
+        l = max(0.05, l * 0.62)
+    elif m == "clarear":
+        l = min(0.93, l + (1 - l) * 0.45)
+    elif m == "pastel":
+        l = min(0.9, l + (1 - l) * 0.55)
+        s = s * 0.7
+    elif m == "saturar":
+        s = min(1, s * 1.45 + 0.12)
+        l = min(0.72, l * 1.06)
+    elif m == "dessaturar":
+        s = s * 0.62
+    elif m == "brilho":
+        s = min(1, s * 1.12 + 0.04)
+        l = min(0.86, l + 0.06)
+    return _rgb2hex(_hsl2rgb([h, s, l]))
+
+
+_cor_cache: dict = {}
+
+
+def cor_hex(texto: str):
+    """Ordem: frase inteira do dicionario ("wood ash", "dark grey"), depois
+    modificadores ("silk", "dark"), depois o lexico normal ("azabache" ->
+    preto). Varias cores misturam-se, que e o que faz "purple-blue" dar
+    azul-arroxeado."""
+    if not texto:
+        return None
+    if texto in _cor_cache:
+        return _cor_cache[texto]
+    hexes = {norm(k): v for k, v in CORES_HEX.items()}
+    modif = {norm(k): v for k, v in MODIF_COR.items()}
+    idx = build_index()
+    toks = [t for t in re.sub(r"[-/_+]", " ", norm(texto)).split(" ") if t]
+    bases = []
+    mods = []
+    i = 0
+    while i < len(toks):
+        saltou = 0
+        for n in range(min(3, len(toks) - i), 0, -1):
+            if saltou:
+                break
+            frase = " ".join(toks[i:i + n])
+            if frase in hexes:
+                bases.append((hexes[frase], n))
+                saltou = n
+        if saltou:
+            i += saltou
+            continue
+        tok = toks[i]
+        if tok in modif:
+            mods.append(modif[tok])
+            i += 1
+            continue
+        hit = next((h for h in idx.get(tok, []) if h["g"] == "cor"), None)
+        if hit and norm(hit["c"]) in hexes:
+            bases.append((hexes[norm(hit["c"])], 1))
+        i += 1
+    cor = None
+    if bases:
+        cor = bases[0][0] if len(bases) == 1 else _mistura(bases)
+    if cor:
+        for m in mods:
+            cor = _aplica_modif(cor, m)
+    _cor_cache[texto] = cor
+    return cor
 
 
 def payload() -> dict:
