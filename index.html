@@ -2300,7 +2300,7 @@ async function entrar(registar) {
 }
 
 async function arranca() {
-  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.16.0')]);
+  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.17.0')]);
   LEX = lex;
   if (!me.user) {
     $('#gate').hidden = false;

@@ -20,6 +20,14 @@ português e em inglês — a língua soma-se, nunca substitui, para nenhuma loj
 ficar de fora só por catalogar na outra. Actualiza sozinho de 24 em 24 horas e
 guarda o histórico.
 
+**Colar um link** vale como pesquisa: mete-se o URL do produto na caixa de
+procura das lojas e o Bobina vai lê-lo. A Evolt resolve-se pelo *slug* (a
+pesquisa da WooCommerce devolve zero mesmo com a página a existir), as Shopify
+por `/products/<slug>.js`, e a Amazon pelo **ASIN** do `/dp/…` — em qualquer
+domínio, `.com` incluído, porque o ASIN é o mesmo em toda a parte. O preço da
+Amazon só entra quando vem em euros: a página devolve a moeda de quem pede, e
+guardar dólares num campo somado como euros estragava o €/kg de tudo.
+
 Cada loja tem a sua manha. A Evolt corre WooCommerce, cuja pesquisa casa uma
 *substring* contígua do título: `asa black` devolve zero e `asa 1kg black`
 devolve sete, porque o "1kg" fica pelo meio — daí pesquisar-se pelo termo mais

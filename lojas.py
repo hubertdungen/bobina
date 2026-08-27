@@ -9,8 +9,10 @@ Cada loja tem o seu próprio bicho e foi confirmada à mão a 2026-08-26:
                                `products`; o suggest.json da Shopify dá 404 aqui)
   eu.qidi3d.com Shopify      -> /search/suggest.json
   eu.elegoo.com Shopify      -> /search/suggest.json
-  amazon.es/.de HTML         -> /s?k=  (a homepage responde 202 a um curl pelado;
-                               com User-Agent de browser + Accept-Language passa)
+  amazon.*      HTML         -> /s?k= para procurar (na .es), /dp/<ASIN> para ler
+                               um link colado, de qualquer domínio. A homepage
+                               responde 202 a um curl pelado; com User-Agent de
+                               browser + Accept-Language passa.
 
 Tudo o que sai daqui é a mesma forma de dicionário -- ver `_produto()`.
 """
@@ -40,7 +42,7 @@ LOJAS = {
     "qidi":    {"nome": "QIDI EU",      "pais": "EU", "url": "https://eu.qidi3d.com"},
     "elegoo":  {"nome": "Elegoo EU",    "pais": "EU", "url": "https://eu.elegoo.com"},
     "reprap":  {"nome": "RepRap PT",     "pais": "PT", "url": "https://reprap.pt"},
-    "amazon":  {"nome": "Amazon ES",    "pais": "ES", "url": "https://www.amazon.es"},
+    "amazon":  {"nome": "Amazon",       "pais": "ES", "url": "https://www.amazon.es"},
 }
 
 
@@ -529,6 +531,38 @@ def busca_amazon(q: str, limite: int = 12) -> list[dict]:
     return out
 
 
+_ASIN_URL = re.compile(r"/(?:dp|gp/product|gp/aw/d)/([A-Z0-9]{10})")
+
+
+def _amazon_por_asin(host: str, asin: str) -> dict | None:
+    """Lê a ficha do produto em vez de a procurar.
+
+    Um link colado da Amazon não tem palavras no caminho -- só o ASIN --, por
+    isso a pesquisa por texto não tinha por onde pegar. O preço só se aceita
+    quando vem em euros: a Amazon devolve a moeda de quem pede, e guardar
+    dólares num campo que a app soma como euros estragava o €/kg de tudo.
+    Fica em branco, e escreve-se à mão."""
+    pagina = _get(f"https://{host}/dp/{asin}").decode("utf-8", "replace")
+    t = re.search(r'<span[^>]+id="productTitle"[^>]*>(.*?)</span>', pagina, re.S)
+    if not t:
+        return None
+    titulo = _txt(t.group(1))
+    im = (re.search(r'"hiRes":"(https://[^"]+)"', pagina)
+          or re.search(r'data-old-hires="(https://[^"]+)"', pagina)
+          or re.search(r'"large":"(https://[^"]+)"', pagina))
+    pm = re.search(r'class="a-offscreen">([^<]+)<', pagina)
+    bruto = pm.group(1) if pm else ""
+    preco = _num(bruto) if ("€" in bruto or "EUR" in bruto.upper()) else None
+    # a linha "Marca | JAYO" da tabela de detalhes: o bylineInfo do topo vem
+    # vazio nesta página (o nome está lá dentro noutro elemento)
+    marca = re.search(r'(?:Marca|Brand|Marke|Marque)</span>.{0,200}?<span[^>]*>([^<]{2,40})<',
+                      pagina, re.S)
+    return _produto(
+        "amazon", titulo=titulo, preco=preco, url=f"https://{host}/dp/{asin}",
+        imagem=im.group(1) if im else "", ref=asin,
+        marca=_txt(marca.group(1)).strip(" -") if marca else "")
+
+
 # ------------------------------------------------------------------ relevância --
 
 _INDEX = build_index()
@@ -663,7 +697,9 @@ def loja_do_url(url: str) -> str:
         return "elegoo"
     if h.endswith("reprap.pt"):
         return "reprap"
-    if h.endswith("amazon.es") or h.endswith("amazon.de"):
+    # qualquer domínio da Amazon: o produto lê-se pelo ASIN, que é o mesmo em
+    # toda a parte, e o link fica com o domínio de onde veio
+    if re.search(r"(^|\.)amazon\.[a-z.]{2,7}$", h):
         return "amazon"
     return ""
 
@@ -685,7 +721,15 @@ def produto_por_url(texto: str) -> dict:
     u = urllib.parse.urlparse(url)
     path = urllib.parse.unquote(u.path)
     prod = None
-    if loja == "evolt":
+    if loja == "amazon":
+        m = _ASIN_URL.search(path)
+        if not m:
+            raise ValueError("link da Amazon sem produto (falta o /dp/…)")
+        try:
+            prod = _amazon_por_asin(u.netloc or "www.amazon.es", m.group(1))
+        except Exception:            # noqa: BLE001 -- 404, bloqueio, o que for:
+            prod = None              # cai na pesquisa e acaba num erro legível
+    elif loja == "evolt":
         m = re.search(r"/produto/([^/?#]+)", path)
         if not m:
             raise ValueError("link da Evolt sem produto")
