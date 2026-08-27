@@ -31,7 +31,7 @@ import lexicon
 import lojas
 
 ROOT = Path(__file__).resolve().parent
-VERSAO = "1.18.0"
+VERSAO = "1.18.1"
 SESSION_COOKIE = "bobina_session"
 SESSION_DIAS = int(os.environ.get("BOBINA_SESSION_DAYS", "30"))
 MAX_BODY = int(os.environ.get("BOBINA_MAX_BODY", "2097152"))
@@ -680,6 +680,7 @@ def filamentos_para_fatia(uid: int) -> list[dict]:
             "bobines": len(vivas),
             # uma a uma, para o Fatia saber de qual dar baixa
             "lista_bobines": bobines_para_fatia(vivas, locais, peso),
+            "na_impressora": len([b for b in vivas if int(b["na_impressora"] or 0)]),
             "selados": len([b for b in vivas if b["estado"] == "selado"]),
             "abertos": len([b for b in vivas if b["estado"] == "aberto"]),
             "vazios": len([b for b in bs if b["estado"] == "vazio"]),
@@ -1151,6 +1152,42 @@ class Handler(SimpleHTTPRequestHandler):
             else:
                 r = self._gastar(d["id"], corpo, agora())
             return self.erro(r["erro"]) if "erro" in r else self.json(r)
+
+        # O Fatia também mostra que filamento está montado e deixa trocar esse
+        # sinal sem abrir o Bobina. A regra é a mesma do cartão daqui: se já há
+        # alguma bobine montada desse filamento, tira-as todas; se não há, monta
+        # a que está mais perto de acabar.
+        if caminho == "/api/fatia/impressora" and metodo == "POST":
+            tok = str(corpo.get("token") or (q.get("token") or [""])[0])
+            if not hmac.compare_digest(tok, token_ponte()):
+                return self.erro("token inválido", 403)
+            d = dono()
+            if not d:
+                return self.erro("ainda não há utilizador nesta máquina", 404)
+            fid = int(corpo.get("filamento_id") or 0)
+            if not linha("SELECT 1 FROM filamentos WHERE id=? AND user_id=?", (fid, d["id"])):
+                return self.erro("filamento desconhecido", 404)
+            bs = linhas("SELECT * FROM bobines WHERE filamento_id=? AND user_id=?"
+                        " AND estado!='arquivado'", (fid, d["id"]))
+            ligadas = [b for b in bs if int(b["na_impressora"] or 0)]
+            mudadas: list[int] = []
+            t = agora()
+            if ligadas:
+                for b in ligadas:
+                    executa("UPDATE bobines SET na_impressora=0, actualizado_em=?"
+                            " WHERE id=? AND user_id=?", (t, b["id"], d["id"]))
+                    mudadas.append(b["id"])
+                return self.json({"ok": True, "estado": "fora", "bobines": mudadas})
+            uteis = [b for b in bs if b["estado"] != "vazio"]
+            alvo = sorted(uteis or bs, key=lambda b: (
+                float(b["restante_g"] or 0), int(b["criado_em"] or 0), int(b["id"])
+            ))[:1]
+            if not alvo:
+                return self.erro("sem bobines desse filamento")
+            executa("UPDATE bobines SET na_impressora=1, actualizado_em=?"
+                    " WHERE id=? AND user_id=?", (t, alvo[0]["id"], d["id"]))
+            return self.json({"ok": True, "estado": "na_impressora",
+                              "bobines": [alvo[0]["id"]]})
 
         us = self.exige()
         if not us:
