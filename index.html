@@ -165,13 +165,16 @@ input[type=color]{width:44px;height:32px;min-height:32px;padding:2px;cursor:poin
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bar{height:5px;border-radius:3px;background:var(--panel2);margin-top:7px;overflow:hidden}
 .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--deep),var(--accent2))}
-.qty{margin-left:auto;text-align:right;flex:none}
+/* a coluna da direita estica à altura do cartão e centra-se: com o bico por
+   baixo da contagem, alinhada ao topo ficava a puxar tudo para cima */
+.qty{margin-left:auto;text-align:right;flex:none;align-self:stretch;
+  display:flex;flex-direction:column;align-items:flex-end;justify-content:center}
 .qty b{font-size:17px;font-variant-numeric:tabular-nums}
 /* o bico vive debaixo da contagem: cinzento quer dizer que não há nada montado,
    e a cor que há. Verde e não roxo de propósito -- o roxo já quer dizer "por
    abrir" nesta lista, e duas coisas com a mesma cor não se distinguem. */
-.noz{display:inline-flex;margin-top:5px;padding:3px;line-height:0;cursor:pointer;
-  border:1px solid transparent;border-radius:8px;background:none;color:var(--dim);
+.noz{display:inline-flex;margin-top:3px;padding:2px;line-height:0;cursor:pointer;
+  border:1px solid transparent;border-radius:7px;background:none;color:var(--dim);
   opacity:.5;transition:.15s}
 .noz:hover{opacity:1;color:var(--txt);border-color:var(--line)}
 .noz.on{opacity:1;color:var(--good);border-color:rgba(62,207,142,.42);
@@ -665,13 +668,14 @@ const CAIXA_MINI = `<svg viewBox="0 0 48 48" width="13" height="13" style="verti
   fill="none" stroke="currentColor" stroke-width="3.4" aria-hidden="true">
   <path d="M8 18 h32 v20 a3 3 0 0 1 -3 3 h-26 a3 3 0 0 1 -3 -3 z" stroke-linejoin="round"/>
   <rect x="5" y="9" width="38" height="9" rx="2"/></svg>`;
-/* o bico da impressora: bloco de aquecimento, cone e o fio a entrar. Tudo em
-   currentColor -- o cinzento/verde vem da classe, não do desenho. */
-const NOZZLE = `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-  <path d="M12 2v3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+/* o bico da impressora: bloco de aquecimento e cone, e mais nada -- o fio a
+   entrar e a gota a cair ficavam bonitos em grande, mas a 13 px só faziam a
+   caixa do botão alta e o desenho pequeno. A viewBox está apertada ao desenho
+   pela mesma razão. Tudo em currentColor: a cor vem da classe. */
+const NOZZLE = `<svg viewBox="5.4 5 13.2 12.6" width="14" height="13" aria-hidden="true"
+  style="display:block">
   <rect x="6" y="5.5" width="12" height="6.5" rx="1.4" fill="currentColor"/>
-  <path d="M8.6 12h6.8l-2.2 5.2h-2.4z" fill="currentColor"/>
-  <circle cx="12" cy="20" r="1.5" fill="currentColor" opacity=".55"/></svg>`;
+  <path d="M8.6 12h6.8l-2.2 5.2h-2.4z" fill="currentColor"/></svg>`;
 
 const textoCorFil = f => [f.material, f.cor].filter(Boolean).join(' ');
 const corDoFil = f => f.cor_hex || corDe(textoCorFil(f)) || corDe(f.cor) || NEUTRA;
@@ -2206,7 +2210,7 @@ async function entrar(registar) {
 }
 
 async function arranca() {
-  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.13.0')]);
+  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.13.1')]);
   LEX = lex;
   if (!me.user) {
     $('#gate').hidden = false;
