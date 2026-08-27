@@ -70,7 +70,9 @@ cru dava um grupo por bobine.
 
 Na vista **por local**, um filamento espalhado por duas estantes aparece nas
 duas, e cada cartão conta só o que está ali: é isso que a ordenação usa, e o
-cartão diz **de quantas bobines** faz parte e **onde estão as outras**.
+cartão diz **de quantas bobines** faz parte e **onde estão as outras** — no
+lugar da estante, que o cabeçalho do grupo já diz. As linhas do cartão nunca
+dobram, para os cartões terem todos a mesma altura.
 
 **Arrumação.** Locais em árvore (sala › armário › prateleira › caixa) com
 capacidade, e a lista desenha essa árvore: o que está dentro de outro aparece
