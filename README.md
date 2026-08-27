@@ -68,7 +68,14 @@ capacidade, e a lista desenha essa árvore: o que está dentro de outro aparece
 encaixado lá dentro. Nome, tipo, capacidade e "dentro de" mudam-se a qualquer
 momento; o campo "dentro de" nunca oferece o próprio local nem um que já esteja
 lá dentro, e o servidor recusa na mesma — um anel de locais fazia o caminho até
-à raiz nunca terminar. O agente (`agente.py`) propõe nomes e onde pôr cada bobine; o
+à raiz nunca terminar. Cada local diz quantas bobines tem, quanto filamento por
+gastar lá está e **quanto vale** esse filamento — as três contas somam sempre a
+subárvore, por isso uma estante mostra o que está nas gavetas dela. O topo da app
+fecha a conta: quilos e euros armazenados, do mesmo conjunto de bobines. O valor
+sai do que se pagou por cada bobine (preço a dividir pelo peso que trazia, vezes o
+que resta); sem preço próprio vale o €/kg médio do filamento, e sem nenhum dos dois
+fica de fora — somar menos é melhor do que inventar um preço. O agente
+(`agente.py`) propõe nomes e onde pôr cada bobine; o
 **Preview** não escreve nada, o **Apply** aplica e guarda a reversão para se
 poder **anular**. Claude, GPT, Gemini ou DeepSeek, à escolha em Definições.
 

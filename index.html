@@ -626,6 +626,22 @@ const corDoFil = f => f.cor_hex || corDe(f.cor) || NEUTRA;
    estava mesmo ao lado. */
 const tinta = f => visivel(corDoFil(f));
 const tinge = (hex, a) => hex + Math.round(a * 255).toString(16).padStart(2, '0');
+/* A barra de uma bobine só muda de cor na segunda metade: cheia até aos 50%
+   fica no roxo da casa, daí para baixo passa por âmbar e acaba em vermelho.
+   O degrau é aos 50% de propósito -- uma barra que muda de cor a cada gole
+   parece um arco-íris e deixa de querer dizer nada. */
+const LIMIAR_BARRA = 0.5;
+const misturaHex = (a, b, t) => { const A = hex2rgb(a), B = hex2rgb(b);
+  return rgb2hex(A.map((v, i) => v + (B[i] - v) * t)); };
+function corBarra(fracao) {
+  if (!(fracao < LIMIAR_BARRA)) return '';            // metade para cima: o roxo
+  const t = Math.max(0, Math.min(1, (LIMIAR_BARRA - fracao) / LIMIAR_BARRA));
+  const par = t <= .5
+    ? ['#6d3bf5', '#d97706', '#f0abfc', '#fbbf24', t * 2]        // roxo -> âmbar
+    : ['#d97706', '#b91c1c', '#fbbf24', '#ef4444', (t - .5) * 2];  // âmbar -> vermelho
+  return `;background:linear-gradient(90deg,${misturaHex(par[0], par[1], par[4])},`
+    + `${misturaHex(par[2], par[3], par[4])})`;
+}
 /* O material SEM o subtipo: "PETG Pro" e "PETG Matte" são ambos PETG, "PLA+" é
    PLA. É o canónico do léxico -- o mesmo que faz a pesquisa por "pla" achar os
    PLA+ -- e é o que se quer numa etiqueta de relance. */
@@ -815,6 +831,17 @@ function precoKg(bs) {
   const kg = comPreco.reduce((a, b) => a + (+b.peso_liquido_g || 0), 0) / 1000;
   return kg > 0 ? pago / kg : null;
 }
+/* Quanto vale o filamento que ainda está por gastar numa bobine: o que se pagou
+   por ela a dividir pelo peso que trazia, vezes o que resta. Sem preço próprio
+   vale o €/kg médio do filamento (a mesma regra do cartão); sem nenhum dos dois
+   não entra na conta -- somar menos é melhor do que inventar um preço. */
+function valorRestante(b) {
+  const rest = b.estado === 'vazio' ? 0 : (+b.restante_g || 0);
+  if (!rest) return 0;
+  if (+b.preco > 0 && +b.peso_liquido_g > 0) return rest * (+b.preco) / (+b.peso_liquido_g);
+  const kg = precoKg(PORLOC[b.filamento_id]);
+  return kg ? rest * kg / 1000 : 0;
+}
 const restante = f => vivas(f).reduce((a, b) => a + (b.estado === 'vazio' ? 0 : (+b.restante_g || 0)), 0);
 
 /* ============================ pesquisa ============================ */
@@ -865,7 +892,8 @@ function cartao(f, termos, bs) {
       <div class="nm">${realca(nome || 'sem nome', termos)}</div>
       <div class="mt">${esc(peso)}${vazio ? '' : ' · ' + realca(locais.join(' · '), termos)}${
         lojas.length ? ' · ' + realca(lojas.join(', '), termos) : ''}</div>
-      ${vazio ? '' : `<div class="bar"><i style="width:${pct.toFixed(0)}%"></i></div>
+      ${vazio ? '' : `<div class="bar"><i style="width:${pct.toFixed(0)}%${
+        corBarra(pct / 100)}"></i></div>
       <div class="mt">${Math.round(rest)} g de ${Math.round(total)} g${
         pkg ? ` · <b>${eur(pkg)}/kg</b>` : ''}${abertas ? ` · ${abertas} aberta${abertas > 1 ? 's' : ''}` : ''}${
         nCaixa ? ` · ${CAIXA_MINI} ${nCaixa === bs.length ? 'na caixa' : nCaixa + ' na caixa'}` : ''}</div>`}
@@ -1677,12 +1705,13 @@ function desenhaPrecos() {
 
 /* ============================ locais ============================ */
 function desenhaLocais() {
-  const conta = {}, gramas = {};
+  const conta = {}, gramas = {}, euros = {};
   INV.bobines.forEach(b => {
     if (!b.local_id) return;
     conta[b.local_id] = (conta[b.local_id] || 0) + 1;
     gramas[b.local_id] = (gramas[b.local_id] || 0)
       + (b.estado === 'vazio' ? 0 : (+b.restante_g || 0));
+    euros[b.local_id] = (euros[b.local_id] || 0) + valorRestante(b);
   });
 
   /* filhos por pai. Um local cujo pai desapareceu volta a ser raiz em vez de
@@ -1717,6 +1746,8 @@ function desenhaLocais() {
     const dentro = filhosDe.reduce((a, id) => a + (conta[id] || 0), 0);
     // o peso segue a mesma regra da contagem: uma raiz soma tudo o que tem dentro
     const kg = ((gramas[l.id] || 0) + filhosDe.reduce((a, id) => a + (gramas[id] || 0), 0)) / 1000;
+    // e o dinheiro segue o peso: é o mesmo filamento, contado a outro preço
+    const val = (euros[l.id] || 0) + filhosDe.reduce((a, id) => a + (euros[id] || 0), 0);
     /* A conta de um local é a dele MAIS a de tudo o que está lá dentro: uma
        estante com duas gavetas de 4 bobines tem 8, não zero. A capacidade é
        comparada com esse total, que é o que de facto lá está. */
@@ -1731,6 +1762,8 @@ function desenhaLocais() {
               title="tudo o que está aqui dentro${cap ? ', e o que cabe' : ''}">${total}${cap ? ' / ' + cap : ''}</span>
         ${kg > 0 ? `<span class="via" title="filamento por gastar, somando os locais lá dentro">${
           kg >= 1 ? kg.toFixed(1) + ' kg' : Math.round(kg * 1000) + ' g'}</span>` : ''}
+        ${val > 0 ? `<span class="via" title="quanto vale o filamento por gastar que está aqui (só conta o que tem preço)">${
+          eur(val)}</span>` : ''}
         <button class="ghost danger" data-lx="${l.id}" title="apagar">✕</button>
       </div>
       ${dentro ? `<div class="locdet">${aqui} aqui · ${dentro} nos ${meus.length} local(is) lá dentro</div>` : ''}
@@ -1940,8 +1973,12 @@ async function carrega() {
   reindexa();
   const bs = INV.bobines.filter(b => b.estado !== 'arquivado');
   const kg = bs.reduce((a, b) => a + (b.estado === 'vazio' ? 0 : (+b.restante_g || 0)), 0) / 1000;
+  // o mesmo conjunto de bobines que dá os quilos, contado a preço: as duas
+  // metades da frase têm de falar do mesmo material
+  const val = bs.reduce((a, b) => a + valorRestante(b), 0);
   $('#resumoTopo').textContent =
-    `${INV.filamentos.length} filamentos · ${bs.length} bobines · ${kg.toFixed(1)} kg armazenados`;
+    `${INV.filamentos.length} filamentos · ${bs.length} bobines · ${kg.toFixed(1)} kg`
+    + ` · ${eur(val)} armazenados`;
   $('#ver').textContent = 'v' + (INV.versao || '');
   // o select de "onde comprei" só se pode montar depois de o servidor dizer que
   // lojas conhece, por isso é aqui e não no arranque
