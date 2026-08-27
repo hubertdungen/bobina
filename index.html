@@ -255,6 +255,11 @@ footer{margin:26px 0 10px;text-align:center;color:var(--dim);font-size:12px}
   box-shadow:0 8px 28px rgba(0,0,0,.5);max-width:90vw}
 dialog{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:var(--r);
   padding:0;max-width:560px;width:94vw}
+/* o de adicionar leva mais uma coluna: com onze campos a dois, num 1080p o
+   botão de confirmar caía abaixo da dobra e obrigava a rolar para o clicar */
+dialog.largo{max-width:780px}
+@media(max-width:820px){.dlg .grid.c3{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.dlg .grid.c3{grid-template-columns:1fr}}
 dialog::backdrop{background:rgba(0,0,0,.6)}
 .dlg{padding:18px}
 .dlg h2{margin-bottom:14px}
@@ -1777,9 +1782,10 @@ async function adicionaDeLoja(p) {
   const consulta = entradaTemURL($('#sq').value) ? '' : ($('#sq').value || '');
   const g = adivinha(p.titulo, {marcaLoja: p.marca, consulta});
   const dlg = document.createElement('dialog');
+  dlg.className = 'largo';
   dlg.innerHTML = `<div class="dlg"><h2>Adicionar</h2>
     <div class="sub" style="margin-bottom:12px">${esc(p.titulo)}</div>
-    <div class="grid c2">
+    <div class="grid c3">
       <div class="field"><label>Marca</label><input id="xMarca" value="${esc(g.marca)}"></div>
       <div class="field"><label>Material</label><input id="xMat" value="${esc(g.material)}"></div>
       <div class="field"><label>Cor</label><input id="xCor" value="${esc(g.cor)}"></div>
@@ -2328,7 +2334,7 @@ async function entrar(registar) {
 }
 
 async function arranca() {
-  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.17.1')]);
+  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.18.2')]);
   LEX = lex;
   if (!me.user) {
     $('#gate').hidden = false;
