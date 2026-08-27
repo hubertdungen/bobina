@@ -60,11 +60,17 @@ gastar primeiro —, e clicar outra vez tira todas. Para escolher outra, abre-se
 filamento e marca-se lá a bobine; o cartão acende à mesma, e só apaga quando
 nenhuma lá dentro estiver marcada. Podem estar várias ao mesmo tempo, para quem
 imprime a duas cores. Não é um estado da bobine: uma bobine montada continua
-*aberta*. Na pesquisa há uma chip com o mesmo símbolo — **na impressora (n)** —
-que deixa na lista só o que está montado; aparece quando há alguma coisa
-montada, e desliga-se sozinha quando sai a última. Ao adicionar uma bobine
-também se pode marcá-la logo, ao lado da embalagem — só quando se adiciona uma
-de cada vez, porque montar três ao mesmo tempo seria mentira. Os três sinais — símbolo a verde, contorno verde e véu verde — ligam-se
+*aberta*. Ao adicionar uma bobine também se pode marcá-la logo, ao lado da
+embalagem — só quando se adiciona uma de cada vez, porque montar três ao mesmo
+tempo seria mentira.
+
+**Perguntar pelo estado.** Três chips só com o desenho — o bico, a caixa e a
+bobine — deixam na lista o que está **na impressora**, o que ainda tem **caixa**
+e o que já **não tem**. Não são interruptores à parte: escrevem o termo na caixa
+de pesquisa, e escrever `na impressora`, `com caixa`, `sem caixa` ou `bobina` à
+mão dá o mesmo. Somam-se entre si e com o texto — `PLA na impressora sem caixa`
+procura uma bobine que seja as três coisas ao mesmo tempo, e não um filamento
+com uma de cada. Os três sinais — símbolo a verde, contorno verde e véu verde — ligam-se
 e desligam-se um a um em *Definições* (o véu vem desligado).
 
 **Aparência.** Em *Definições* dá para forçar o desenho ou a foto em todas as
@@ -75,6 +81,10 @@ que se nota sempre, e um **reflexo** que o atravessa devagar (muito mais pausa d
 que passagem, e nenhum se o sistema pedir menos animação). Só o reflexo já chega
 para dar o sinal sem pintar o cartão. Basta abrir uma bobine para o grupo deixar
 de estar marcado.
+
+**O que não coube.** As linhas dos cartões não dobram, para os cartões terem
+todos a mesma altura; quando o texto é cortado, o rato por cima abre uma dica
+com o resto. Só quando é mesmo cortado — uma dica que aparece sempre é ruído.
 
 **Vistas.** A lista mostra-se seguida ou agrupada por **local**, **marca**,
 **material**, **sub-material** ou **cor**, com sub-ordenação (nome, mais

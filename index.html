@@ -91,6 +91,9 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:12p
 .chip:hover{border-color:var(--accent);color:var(--txt)}
 .chip.on{background:var(--accent);color:#160b33;border-color:var(--accent)}
 .chip.comicone{gap:5px;padding-left:7px}
+/* chip só com o desenho: sem texto, a folga dos lados passa a ser igual */
+.chip.soicone{padding:0 7px;gap:0}
+.chip.soicone svg{vertical-align:0}
 /* ligada fica verde como o resto do "na impressora" -- a menos que o símbolo a
    verde esteja desligado nas Definições, e aí segue o roxo das outras chips */
 .chip.nozchip.on:not(.roxo){background:var(--good);border-color:var(--good);color:#062418}
@@ -199,6 +202,14 @@ input[type=color]{width:44px;height:32px;min-height:32px;padding:2px;cursor:poin
    o filamento inteiro era so aquilo, e a ordenacao ao lado nao batia certo */
 .spool .alhures{color:var(--accent2);white-space:nowrap}
 .empty{text-align:center;color:var(--dim);padding:38px 16px;font-size:14px}
+/* dica: o que não coube na linha. Não rouba o rato (pointer-events:none), senão
+   apareceria por cima do próprio cartão e o clique morria lá dentro. */
+.dica{position:fixed;z-index:400;max-width:min(360px,86vw);padding:8px 11px;
+  border-radius:10px;border:1px solid var(--line);background:var(--panel);
+  color:var(--txt);font-size:12px;line-height:1.45;pointer-events:none;
+  box-shadow:0 12px 30px rgba(0,0,0,.45);opacity:0;transform:translateY(-3px);
+  transition:opacity .12s ease,transform .12s ease}
+.dica.ver{opacity:1;transform:none}
 
 /* ---- resultados de loja ---- */
 .hit{display:flex;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);
@@ -997,7 +1008,7 @@ function cartao(f, termos, bs, emLocal) {
         : ''}</div>
     <div style="min-width:0;flex:1">
       <div class="nm">${realca(nome || 'sem nome', termos)}</div>
-      <div class="mt" title="${esc([...locais, ...locaisFora].join(' · '))}">${esc(peso)}${
+      <div class="mt" data-dica="${esc([...locais, ...locaisFora].join(' · '))}">${esc(peso)}${
         onde ? ' · ' + onde : ''}${
         lojas.length ? ' · ' + realca(lojas.join(', '), termos) : ''}</div>
       ${vazio ? '' : `<div class="bar"><i style="width:${pct.toFixed(0)}%${
@@ -1044,11 +1055,36 @@ let VER = {
 let VISTA = PREF.ler('vista', 'seguido');   // seguido | local | marca | material | cor
 let ORDEM = PREF.ler('ordem', 'nome');      // sub-ordenação dentro de cada grupo
 let VER_SEM_STOCK = PREF.ler('semstock', false);
-/* "o que está montado" é uma pergunta do momento, não uma preferência: não se
-   guarda, senão abria-se a app amanhã com a lista filtrada sem se perceber
-   porquê. */
-let SO_IMPRESSORA = false;
-const montadas = f => vivas(f).filter(b => +b.na_impressora).length;
+/* Perguntas sobre o ESTADO das bobines, não sobre o nome: "na impressora",
+   "com caixa", "sem caixa". Saem do texto antes de a pesquisa correr -- senão
+   iam procurar as palavras no nome do filamento e não achavam nada -- e passam
+   a filtro. Escrevem-se à mão ou clicam-se nas chips: as chips só põem e tiram
+   o termo da caixa, para a pesquisa continuar a ser o centro (e para o filtro
+   estar sempre à vista, em vez de ser um estado escondido num botão). */
+const FILTROS = [
+  {chave: 'imp', termo: 'na impressora', re: /\b(?:na\s+)?impressora\b/gi,
+   icone: () => NOZZLE, titulo: 'só as que estão na impressora',
+   passa: b => !!+b.na_impressora},
+  {chave: 'comcaixa', termo: 'com caixa', re: /\b(?:com|na)\s+caixa\b/gi,
+   icone: () => CAIXA_MINI, titulo: 'só as que ainda têm a caixa',
+   passa: b => !!+b.caixa},
+  {chave: 'semcaixa', termo: 'sem caixa', re: /\bsem\s+caixa\b|\bbobina\b/gi,
+   icone: () => BOBINA_MINI, titulo: 'só as que já não têm caixa',
+   passa: b => !+b.caixa},
+];
+function separaFiltros(q) {
+  let texto = String(q || ''), activos = [];
+  for (const f of FILTROS) {
+    const limpo = texto.replace(f.re, ' ');
+    if (limpo !== texto) { activos.push(f); texto = limpo; }
+  }
+  return {texto: texto.replace(/\s+/g, ' ').trim(), activos};
+}
+/* várias perguntas ao mesmo tempo têm de cair na MESMA bobine: "na impressora"
+   e "sem caixa" é uma bobine montada e fora da caixa, não um filamento com uma
+   de cada */
+const passaFiltros = (f, activos) => !activos.length
+  || vivas(f).some(b => activos.every(x => x.passa(b)));
 
 /* A cor canónica de um filamento: "Jet Black", "Preto" e "Traffic Black" caem
    todos em "preto". É o que torna o agrupamento por cor útil -- agrupar pelo
@@ -1229,21 +1265,17 @@ function porFaceta(fs, termos, faceta) {
 }
 
 function desenhaLista() {
-  const q = $('#q').value;
+  const {texto: q, activos} = separaFiltros($('#q').value);
   const termos = termosDe(q);
-  const todos = resultados(q);
+  const todos = resultados(q).filter(f => passaFiltros(f, activos));
   /* Um filamento de que já não se tem nenhuma bobine não é inventário: fica
      guardado (pelo histórico de preços e para se voltar a comprar) mas sai da
      lista, senão continuava lá especado a fingir que se tem. */
   const escondidos = todos.filter(f => vivas(f).length === 0).length;
-  /* se a última bobine saiu da impressora, o filtro sai com ela -- senão ficava
-     ligado a mostrar uma lista vazia e sem chip por onde o desligar */
-  if (!INV.filamentos.some(montadas)) SO_IMPRESSORA = false;
-  const fs = (VER_SEM_STOCK ? todos : todos.filter(f => vivas(f).length > 0))
-    .filter(f => !SO_IMPRESSORA || montadas(f));
+  const fs = VER_SEM_STOCK ? todos : todos.filter(f => vivas(f).length > 0);
 
-  $('#qCnt').textContent = q ? String(fs.length) : '';
-  $('#qClr').hidden = !q;
+  $('#qCnt').textContent = (q || activos.length) ? String(fs.length) : '';
+  $('#qClr').hidden = !$('#q').value;
   const agrupada = VISTA !== 'seguido';
   $('#lista').className = agrupada ? '' : 'spools';
   $('#lista').innerHTML = VISTA === 'local' ? porLocal(fs, termos)
@@ -1256,9 +1288,9 @@ function desenhaLista() {
     const escape = escondidos && !VER_SEM_STOCK
       ? `<br><span class="sub">${escondidos} sem stock — vê o botão <b>sem stock</b> aqui em cima.</span>` : '';
     vazio.innerHTML = INV.filamentos.length
-      ? (SO_IMPRESSORA
-           ? `Nada montado${q ? ` que case com <b>${esc(q)}</b>` : ''}.<br><span class="sub">${
-               NOZZLE} marca-se no cartão de cada filamento.</span>`
+      ? (activos.length
+           ? `Nada ${esc(activos.map(a => a.termo).join(' e '))}${
+               q ? ` com <b>${esc(q)}</b>` : ''}.`
          : q ? `Nada com <b>${esc(q)}</b>.<br><span class="sub">Experimenta menos palavras — "asa preto" chega.</span>${escape}`
            : `Sem bobines em casa.${escape}`)
       : `Ainda não tens nada.<br><span class="sub">Vai a <b>Adicionar</b> e procura numa loja.</span>`;
@@ -1270,14 +1302,14 @@ const CHIPS = ['PLA', 'PETG', 'ASA', 'ABS', 'TPU', 'Nylon', 'preto', 'branco', '
 function desenhaChips() {
   const termos = termosDe($('#q').value);
   const sem = INV.filamentos.filter(f => vivas(f).length === 0).length;
-  const nImp = INV.filamentos.reduce((a, f) => a + montadas(f), 0);
+  const activos = separaFiltros($('#q').value).activos.map(f => f.chave);
   $('#qChips').innerHTML = CHIPS.map(c =>
       `<span class="chip${termos.includes(norm(c)) ? ' on' : ''}" data-chip="${esc(c)}">${esc(c)}</span>`).join('')
     + (sem ? `<span class="chip${VER_SEM_STOCK ? ' on' : ''}" data-semstock="1">sem stock (${sem})</span>` : '')
-    + (nImp ? `<span class="chip comicone nozchip${SO_IMPRESSORA ? ' on' : ''}${
-        VER.impIcone ? '' : ' roxo'}" data-soimp="1"
-        title="ver só as bobines que estão montadas na impressora">${
-        NOZZLE} na impressora (${nImp})</span>` : '')
+    + FILTROS.map(f => `<span class="chip soicone${
+        f.chave === 'imp' ? ' nozchip' + (VER.impIcone ? '' : ' roxo') : ''}${
+        activos.includes(f.chave) ? ' on' : ''}" data-filtro="${f.chave}"
+        title="${esc(f.titulo)}" aria-label="${esc(f.titulo)}">${f.icone()}</span>`).join('')
     + `<span class="vista">
         <span class="lab">agrupar</span>
         <select id="qVista" title="como agrupar a lista">${Object.entries(VISTAS).map(([k, t]) =>
@@ -2268,7 +2300,7 @@ async function entrar(registar) {
 }
 
 async function arranca() {
-  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.15.1')]);
+  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.16.0')]);
   LEX = lex;
   if (!me.user) {
     $('#gate').hidden = false;
@@ -2288,6 +2320,44 @@ async function arranca() {
   $('#q').focus();
 }
 
+/* ---- a dica do que ficou cortado ----
+   Só aparece quando o texto NÃO cabe mesmo (scrollWidth > clientWidth): uma
+   dica que aparece sempre é ruído, e a linha já se lê. Espera um pouco antes de
+   abrir, para passar o rato por cima de uma lista não acender dicas em cadeia. */
+const dica = Object.assign(document.createElement('div'), {className: 'dica', hidden: true});
+document.body.appendChild(dica);
+let dicaAlvo = null, dicaTimer;
+const cortado = el => el.scrollWidth > el.clientWidth + 1;
+function mostraDica(el) {
+  const txt = (el.dataset.dica || el.textContent || '').replace(/\s+/g, ' ').trim();
+  if (!txt) return;
+  dica.textContent = txt;
+  dica.hidden = false;
+  dica.style.left = dica.style.top = '0px';       // medir antes de encostar
+  const r = el.getBoundingClientRect(), d = dica.getBoundingClientRect();
+  const y = r.bottom + 6 + d.height > innerHeight - 8 ? r.top - d.height - 6 : r.bottom + 6;
+  dica.style.left = Math.max(8, Math.min(r.left, innerWidth - d.width - 8)) + 'px';
+  dica.style.top = Math.max(8, y) + 'px';
+  requestAnimationFrame(() => dica.classList.add('ver'));
+}
+function escondeDica() {
+  clearTimeout(dicaTimer);
+  dica.classList.remove('ver'); dica.hidden = true; dicaAlvo = null;
+}
+document.addEventListener('mouseover', e => {
+  const el = e.target.closest('.mt, [data-dica]');
+  if (el === dicaAlvo) return;
+  escondeDica();
+  if (!el || !cortado(el)) return;
+  dicaAlvo = el;
+  dicaTimer = setTimeout(() => { if (dicaAlvo === el) mostraDica(el); }, 260);
+});
+document.addEventListener('mouseout', e => {
+  if (dicaAlvo && !dicaAlvo.contains(e.relatedTarget)) escondeDica();
+});
+addEventListener('scroll', escondeDica, true);
+addEventListener('blur', escondeDica);
+
 /* ---- ligações ---- */
 $('#q').addEventListener('input', () => { desenhaLista(); desenhaChips(); });
 $('#qClr').onclick = () => { $('#q').value = ''; desenhaLista(); desenhaChips(); $('#q').focus(); };
@@ -2295,8 +2365,15 @@ $('#qChips').addEventListener('click', e => {
   const ss = e.target.closest('[data-semstock]');
   if (ss) { VER_SEM_STOCK = !VER_SEM_STOCK; PREF.poe('semstock', VER_SEM_STOCK);
             desenhaLista(); desenhaChips(); return; }
-  if (e.target.closest('[data-soimp]')) {
-    SO_IMPRESSORA = !SO_IMPRESSORA; desenhaLista(); desenhaChips(); return;
+  const fi = e.target.closest('[data-filtro]');
+  if (fi) {
+    const f = FILTROS.find(x => x.chave === fi.dataset.filtro);
+    const {texto, activos} = separaFiltros($('#q').value);
+    /* tirar é apagar o termo; pôr é acrescentá-lo ao que já lá está, com o
+       texto de quem escreveu intacto */
+    $('#q').value = activos.some(a => a.chave === f.chave) ? texto
+                  : (texto ? texto + ' ' : '') + f.termo;
+    desenhaLista(); desenhaChips(); return;
   }
   const c = e.target.closest('[data-chip]'); if (!c) return;
   const termo = c.dataset.chip, actuais = termosDe($('#q').value);
