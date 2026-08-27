@@ -31,7 +31,7 @@ import lexicon
 import lojas
 
 ROOT = Path(__file__).resolve().parent
-VERSAO = "1.12.0"
+VERSAO = "1.13.0"
 SESSION_COOKIE = "bobina_session"
 SESSION_DIAS = int(os.environ.get("BOBINA_SESSION_DAYS", "30"))
 MAX_BODY = int(os.environ.get("BOBINA_MAX_BODY", "2097152"))
@@ -140,6 +140,9 @@ CREATE TABLE IF NOT EXISTS bobines (
   aberto_em TEXT DEFAULT '',
   -- 1 = ainda tem a caixa original (é onde costuma andar o exsicante)
   caixa INTEGER DEFAULT 0,
+  -- 1 = está montada na impressora agora. Não é um estado: uma bobine montada
+  -- continua 'aberta', e podem estar várias ao mesmo tempo (multi-material).
+  na_impressora INTEGER DEFAULT 0,
   notas TEXT DEFAULT '',
   criado_em INTEGER NOT NULL,
   actualizado_em INTEGER NOT NULL
@@ -191,6 +194,8 @@ def abre_db(data_dir: Path) -> sqlite3.Connection:
     cols_bob = {r[1] for r in con.execute("PRAGMA table_info(bobines)")}
     if "caixa" not in cols_bob:
         con.execute("ALTER TABLE bobines ADD COLUMN caixa INTEGER DEFAULT 0")
+    if "na_impressora" not in cols_bob:
+        con.execute("ALTER TABLE bobines ADD COLUMN na_impressora INTEGER DEFAULT 0")
     con.commit()
     DB = con
     return con
@@ -775,7 +780,7 @@ def _local_ou_nada(v) -> int | None:
 
 CAMPOS_BOBINE = ["filamento_id", "etiqueta", "local_id", "peso_liquido_g", "restante_g",
                  "tara_g", "estado", "preco", "moeda", "comprado_em", "comprado_loja",
-                 "comprado_url", "aberto_em", "caixa", "notas"]
+                 "comprado_url", "aberto_em", "caixa", "na_impressora", "notas"]
 CAMPOS_LOCAL = ["nome", "pai_id", "tipo", "notas", "capacidade", "ordem"]
 
 

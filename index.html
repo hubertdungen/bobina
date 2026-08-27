@@ -167,6 +167,22 @@ input[type=color]{width:44px;height:32px;min-height:32px;padding:2px;cursor:poin
 .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--deep),var(--accent2))}
 .qty{margin-left:auto;text-align:right;flex:none}
 .qty b{font-size:17px;font-variant-numeric:tabular-nums}
+/* o bico vive debaixo da contagem: cinzento quer dizer que não há nada montado,
+   e a cor que há. Verde e não roxo de propósito -- o roxo já quer dizer "por
+   abrir" nesta lista, e duas coisas com a mesma cor não se distinguem. */
+.noz{display:inline-flex;margin-top:5px;padding:3px;line-height:0;cursor:pointer;
+  border:1px solid transparent;border-radius:8px;background:none;color:var(--dim);
+  opacity:.5;transition:.15s}
+.noz:hover{opacity:1;color:var(--txt);border-color:var(--line)}
+.noz.on{opacity:1;color:var(--good);border-color:rgba(62,207,142,.42);
+  background:rgba(62,207,142,.1)}
+.noz.on.roxo{color:var(--accent);border-color:rgba(167,139,250,.42);
+  background:rgba(167,139,250,.1)}
+.spool.imprimindo{border-color:rgba(62,207,142,.55)}
+.spool.imprimindo:hover{border-color:var(--good)}
+.spool.veuimp{position:relative;overflow:hidden}
+.spool.veuimp::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(135deg,rgba(62,207,142,.12),rgba(62,207,142,.03) 62%)}
 /* o filamento tem bobines noutro local: sem isto o cartao parecia dizer que
    o filamento inteiro era so aquilo, e a ordenacao ao lado nao batia certo */
 .spool .alhures{color:var(--accent2);white-space:nowrap}
@@ -398,6 +414,12 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
       <div class="field"><label>Etiqueta do material</label>
         <label class="tog" id="verEtiquetaTog" style="align-self:flex-start">
           <input type="checkbox" id="verEtiqueta"> mostrar PLA · PETG · ASA</label></div>
+      <div class="field"><label>Na impressora</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <label class="tog" id="verImpIconeTog"><input type="checkbox" id="verImpIcone"> símbolo a verde</label>
+          <label class="tog" id="verImpContornoTog"><input type="checkbox" id="verImpContorno"> contorno verde</label>
+          <label class="tog" id="verImpVeuTog"><input type="checkbox" id="verImpVeu"> véu verde</label>
+        </div></div>
       <div class="field"><label>Bobines por abrir</label>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <label class="tog" id="verVeuTog"><input type="checkbox" id="verVeu"> véu roxo</label>
@@ -643,6 +665,13 @@ const CAIXA_MINI = `<svg viewBox="0 0 48 48" width="13" height="13" style="verti
   fill="none" stroke="currentColor" stroke-width="3.4" aria-hidden="true">
   <path d="M8 18 h32 v20 a3 3 0 0 1 -3 3 h-26 a3 3 0 0 1 -3 -3 z" stroke-linejoin="round"/>
   <rect x="5" y="9" width="38" height="9" rx="2"/></svg>`;
+/* o bico da impressora: bloco de aquecimento, cone e o fio a entrar. Tudo em
+   currentColor -- o cinzento/verde vem da classe, não do desenho. */
+const NOZZLE = `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+  <path d="M12 2v3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="6" y="5.5" width="12" height="6.5" rx="1.4" fill="currentColor"/>
+  <path d="M8.6 12h6.8l-2.2 5.2h-2.4z" fill="currentColor"/>
+  <circle cx="12" cy="20" r="1.5" fill="currentColor" opacity=".55"/></svg>`;
 
 const textoCorFil = f => [f.material, f.cor].filter(Boolean).join(' ');
 const corDoFil = f => f.cor_hex || corDe(textoCorFil(f)) || corDe(f.cor) || NEUTRA;
@@ -937,9 +966,13 @@ function cartao(f, termos, bs, emLocal) {
      Trocar uma coisa pela outra mantém a linha única -- somar as duas fazia-a
      dobrar, e os cartões deixavam de ter todos a mesma altura. */
   const onde = emLocal ? alhures : (vazio ? '' : realca(locais.join(' · '), termos));
-  const realce = porAbrir && (VER.veu || VER.reflexo)
+  const naImp = bs.filter(b => +b.na_impressora).length;
+  /* montada e "por abrir" não se sobrepõem: os dois véus são o mesmo ::before,
+     e quem está a imprimir manda -- é o que muda de um dia para o outro */
+  const realce = !naImp && porAbrir && (VER.veu || VER.reflexo)
     ? ' porabrir' + (VER.veu ? ' veu' : '') + (VER.reflexo ? ' reflexo' : '') : '';
-  return `<div class="spool${vazio ? ' semstock' : ''}${realce}" data-fil="${f.id}">
+  const marcaImp = naImp ? (VER.impContorno ? ' imprimindo' : '') + (VER.impVeu ? ' veuimp' : '') : '';
+  return `<div class="spool${vazio ? ' semstock' : ''}${realce}${marcaImp}" data-fil="${f.id}">
     <div class="mediacol" style="width:44px">${media(f, 44, bs)}${
       VER.etiqueta && materialBase(f)
         ? `<span class="matbadge" style="color:${esc(tinta(f))};background:${
@@ -958,7 +991,12 @@ function cartao(f, termos, bs, emLocal) {
     </div>
     <div class="qty">${vazio ? '<span class="pill">sem stock</span>'
       : `<b>${bs.length}</b><div class="sub">${fora.length
-          ? `de ${todas.length} bobines` : `bobine${bs.length === 1 ? '' : 's'}`}</div>`}</div>
+          ? `de ${todas.length} bobines` : `bobine${bs.length === 1 ? '' : 's'}`}</div>
+         <button class="noz${naImp ? ' on' : ''}${naImp && !VER.impIcone ? ' roxo' : ''}"
+           data-noz="${f.id}" title="${esc(naImp
+             ? (naImp > 1 ? naImp + ' bobines na impressora' : 'na impressora')
+               + ' — clica para tirar'
+             : 'pôr na impressora (escolhe a que está mais perto de acabar)')}">${NOZZLE}</button>`}</div>
   </div>`;
 }
 
@@ -980,6 +1018,11 @@ let VER = {
   /* eram uma so ('ver.selado'); quem ja a tinha desligada continua sem nada */
   veu: PREF.ler('ver.veu', PREF.ler('ver.selado', true)),
   reflexo: PREF.ler('ver.reflexo', PREF.ler('ver.selado', true)),
+  /* os três sinais de "está na impressora". O véu vem desligado: o cartão já
+     leva contorno e símbolo, e três sinais ao mesmo tempo é de mais. */
+  impIcone: PREF.ler('ver.impIcone', true),
+  impContorno: PREF.ler('ver.impContorno', true),
+  impVeu: PREF.ler('ver.impVeu', false),
 };
 let VISTA = PREF.ler('vista', 'seguido');   // seguido | local | marca | material | cor
 let ORDEM = PREF.ler('ordem', 'nome');      // sub-ordenação dentro de cada grupo
@@ -1257,6 +1300,9 @@ async function abreFilamento(fid) {
           `<span class="chip" data-frac="${fr}">${t}</span>`).join('')}
         <label class="tog${+b.caixa ? ' on' : ''}" data-caixa>
           <input type="checkbox" data-k="caixa" ${+b.caixa ? 'checked' : ''}>${CAIXA_MINI} caixa</label>
+        <label class="tog${+b.na_impressora ? ' on' : ''}" data-imp>
+          <input type="checkbox" data-k="na_impressora" ${+b.na_impressora ? 'checked' : ''}>${
+            NOZZLE} na impressora</label>
         <span class="sub" data-pct></span>
         <button class="ghost danger" data-del="${b.id}" style="margin-left:auto">apagar</button>
       </div>
@@ -1398,6 +1444,9 @@ async function abreFilamento(fid) {
       c.querySelector('[data-caixa]').classList.toggle('on', cx.checked);
       desenhaDet();                                  // a miniatura do topo segue
     };
+    const imp = c.querySelector('[data-k="na_impressora"]');
+    if (imp) imp.onchange = () =>
+      c.querySelector('[data-imp]').classList.toggle('on', imp.checked);
     campoPeso.oninput = () => { refresca(); segueOPeso(); };
     rest.oninput = () => { refresca(); segueOPeso(); };
     estado.onchange = () => {                       // selar enche, esvaziar zera
@@ -2039,6 +2088,9 @@ async function desenhaDef() {
   ligaVer('verEtiqueta', 'etiqueta');
   ligaVer('verVeu', 'veu');
   ligaVer('verReflexo', 'reflexo');
+  ligaVer('verImpIcone', 'impIcone');
+  ligaVer('verImpContorno', 'impContorno');
+  ligaVer('verImpVeu', 'impVeu');
   DEF = await api('/api/definicoes');
   if (DEF.preferencias) PREFS = {...PREFS, ...DEF.preferencias};
   /* O formulário manual é montado no arranque, antes de as preferências
@@ -2154,7 +2206,7 @@ async function entrar(registar) {
 }
 
 async function arranca() {
-  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.12.0')]);
+  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.13.0')]);
   LEX = lex;
   if (!me.user) {
     $('#gate').hidden = false;
@@ -2189,8 +2241,32 @@ $('#qChips').addEventListener('click', e => {
   desenhaLista(); desenhaChips(); $('#q').focus();
 });
 $('#lista').addEventListener('click', e => {
+  const n = e.target.closest('[data-noz]');
+  if (n) return alternaImpressora(+n.dataset.noz);
   const c = e.target.closest('[data-fil]'); if (c) abreFilamento(+c.dataset.fil);
 });
+/* No cartão não se escolhe qual: se já há alguma montada, tira todas; se não há,
+   monta a que está mais perto de acabar (em empate, a mais antiga) -- é a que se
+   quer gastar primeiro. Para escolher outra, abre-se o filamento. */
+async function alternaImpressora(fid) {
+  const bs = (PORLOC[fid] || []).filter(b => b.estado !== 'arquivado');
+  const ligadas = bs.filter(b => +b.na_impressora);
+  let mudanças = ligadas.map(b => [b.id, 0]);
+  if (!ligadas.length) {
+    const uteis = bs.filter(b => b.estado !== 'vazio');
+    const alvo = (uteis.length ? uteis : bs).slice().sort((a, b) =>
+      (+a.restante_g || 0) - (+b.restante_g || 0)
+      || (a.criado_em || 0) - (b.criado_em || 0) || a.id - b.id)[0];
+    if (!alvo) return;
+    mudanças = [[alvo.id, 1]];
+  }
+  try {
+    for (const [id, v] of mudanças)
+      await api('/api/bobines/' + id, {method: 'PATCH', body: JSON.stringify({na_impressora: v})});
+    await carrega();
+    toast(ligadas.length ? 'fora da impressora' : 'na impressora');
+  } catch (e) { toast(e.message); }
+}
 /* a pesquisa nas lojas é na rede, por isso espera que se pare de escrever */
 $('#sq').addEventListener('input', () => { clearTimeout(sqTimer); sqTimer = setTimeout(procuraLojas, 450); });
 $('#sqLojas').addEventListener('click', e => {

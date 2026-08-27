@@ -53,6 +53,16 @@ e lojas diferentes. Adicionar uma bobine que já existe **junta-a ao grupo**: a
 comparação é por significado e não por letras, por isso a mesma bobine comprada
 como "Black" numa loja e "Preto" noutra fica no mesmo sítio.
 
+**Na impressora.** Cada cartão tem o bico da impressora por baixo da contagem:
+cinzento quer dizer que não há nada montado, verde que há. Clicar monta a bobine
+que está **mais perto de acabar** (em empate, a mais antiga) — é a que se quer
+gastar primeiro —, e clicar outra vez tira todas. Para escolher outra, abre-se o
+filamento e marca-se lá a bobine; o cartão acende à mesma, e só apaga quando
+nenhuma lá dentro estiver marcada. Podem estar várias ao mesmo tempo, para quem
+imprime a duas cores. Não é um estado da bobine: uma bobine montada continua
+*aberta*. Os três sinais — símbolo a verde, contorno verde e véu verde — ligam-se
+e desligam-se um a um em *Definições* (o véu vem desligado).
+
 **Aparência.** Em *Definições* dá para forçar o desenho ou a foto em todas as
 bobines, ligar/desligar a etiqueta do material e marcar os **por abrir** — muda
 só o que se vê, nunca o que está gravado. Um grupo em que *todas* as bobines
