@@ -31,7 +31,7 @@ import lexicon
 import lojas
 
 ROOT = Path(__file__).resolve().parent
-VERSAO = "1.17.1"
+VERSAO = "1.18.0"
 SESSION_COOKIE = "bobina_session"
 SESSION_DIAS = int(os.environ.get("BOBINA_SESSION_DAYS", "30"))
 MAX_BODY = int(os.environ.get("BOBINA_MAX_BODY", "2097152"))
@@ -93,6 +93,21 @@ CREATE TABLE IF NOT EXISTS planos (
   estado TEXT DEFAULT 'proposto',
   criado_em INTEGER NOT NULL,
   aplicado_em INTEGER DEFAULT 0
+);
+-- Baixas de filamento pedidas pelo Fatia quando um trabalho foi mesmo impresso.
+-- Guarda-se o restante ANTERIOR de cada bobine (em `detalhe`), que é o que
+-- permite anular sem adivinhar. A `chave` é única de propósito: o Fatia repete
+-- o pedido se carregarem duas vezes, e uma impressão só se gasta uma vez.
+CREATE TABLE IF NOT EXISTS gastos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  chave TEXT NOT NULL,
+  ref TEXT DEFAULT '',
+  origem TEXT DEFAULT 'fatia',
+  detalhe TEXT NOT NULL,
+  estado TEXT DEFAULT 'aplicado',
+  criado_em INTEGER NOT NULL,
+  anulado_em INTEGER DEFAULT 0
 );
 -- Um filamento é o PRODUTO (marca+material+cor+formato). As bobines físicas
 -- que se têm em casa estão na tabela a seguir e apontam para aqui.
@@ -167,6 +182,7 @@ CREATE INDEX IF NOT EXISTS ix_filamentos_user ON filamentos(user_id);
 CREATE INDEX IF NOT EXISTS ix_locais_user ON locais(user_id);
 CREATE INDEX IF NOT EXISTS ix_precos_fil ON precos(filamento_id, visto_em);
 CREATE INDEX IF NOT EXISTS ix_sessions_user ON sessions(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_gastos_chave ON gastos(user_id, chave);
 """
 
 
@@ -546,6 +562,49 @@ def _caminho_local(lid, locais: dict) -> str:
     return " › ".join(reversed(nomes))
 
 
+def precos_vistos_em(uid: int) -> str:
+    """A data da última vez que os preços foram vistos nas lojas.
+
+    O Fatia tinha um campo "Preços revistos em" à mão, que ninguém se lembra de
+    mexer e que envelhece a mentir. Quem anda mesmo a rever preços é o tracker
+    daqui, por isso a data sai de cá."""
+    r = linha("SELECT MAX(p.visto_em) v FROM precos p"
+              " JOIN filamentos f ON f.id = p.filamento_id WHERE f.user_id=?", (uid,))
+    v = int((r or {}).get("v") or 0)
+    return time.strftime("%Y-%m-%d", time.localtime(v)) if v else ""
+
+
+def bobines_para_fatia(bs: list[dict], locais: dict, peso_fil: float) -> list[dict]:
+    """As bobines uma a uma, para o Fatia poder dizer de QUAL saiu o material.
+
+    O total agregado chega para orçamentar, mas não para dar baixa: quem imprime
+    sabe que gastou daquela bobine começada que está na oficina e não da selada
+    que está na garagem. Vão ordenadas pelo restante -- é a ordem por que se
+    costumam acabar.
+
+    O `na_impressora` vai junto porque é a melhor pista que há: a bobine que
+    está montada é, quase de certeza, a que imprimiu o trabalho. É a primeira
+    coisa que a escolha automática do Fatia olha."""
+    saida = []
+    for b in sorted(bs, key=lambda x: float(x["restante_g"] or 0)):
+        peso = float(b["peso_liquido_g"] or peso_fil or 0)
+        saida.append({
+            "id": b["id"],
+            "etiqueta": b["etiqueta"] or "",
+            "restante_g": round(float(b["restante_g"] or 0), 1),
+            "peso_g": round(peso, 1),
+            "estado": b["estado"] or "",
+            "caixa": int(b["caixa"] or 0),
+            "na_impressora": int(b["na_impressora"] or 0),
+            "local": _caminho_local(b["local_id"], locais),
+            "comprado_em": b["comprado_em"] or "",
+            "comprado_loja": b["comprado_loja"] or "",
+            "aberto_em": b["aberto_em"] or "",
+            "criado_em": int(b["criado_em"] or 0),
+        })
+    return saida
+
+
 def filamentos_para_fatia(uid: int) -> list[dict]:
     """Tudo o que o Fatia precisa para escolher um filamento sem sair de lá.
 
@@ -619,6 +678,8 @@ def filamentos_para_fatia(uid: int) -> list[dict]:
             "restante_g": round(sum((b["restante_g"] or 0) for b in vivas), 1),
             "capacidade_g": round(sum((b["peso_liquido_g"] or peso) for b in vivas), 1),
             "bobines": len(vivas),
+            # uma a uma, para o Fatia saber de qual dar baixa
+            "lista_bobines": bobines_para_fatia(vivas, locais, peso),
             "selados": len([b for b in vivas if b["estado"] == "selado"]),
             "abertos": len([b for b in vivas if b["estado"] == "aberto"]),
             "vazios": len([b for b in bs if b["estado"] == "vazio"]),
@@ -872,7 +933,21 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.json({"filamentos": []})
             fils = filamentos_para_fatia(d["id"])
             return self.json({"filamentos": fils, "resumo": resumo_para_fatia(fils),
+                              "precos_em": precos_vistos_em(d["id"]),
                               "fonte": "bobina", "versao": VERSAO, "em": agora()})
+
+        if caminho == "/api/fatia/gastos":
+            tok = (q.get("token") or [""])[0]
+            if not hmac.compare_digest(tok, token_ponte()):
+                return self.erro("token inválido", 403)
+            d = dono()
+            if not d:
+                return self.json({"gastos": []})
+            return self.json({"gastos": [
+                {**g, "detalhe": json.loads(g["detalhe"] or "{}")}
+                for g in linhas("SELECT id,chave,ref,detalhe,estado,criado_em,anulado_em"
+                                " FROM gastos WHERE user_id=? ORDER BY id DESC LIMIT 30",
+                                (d["id"],))]})
 
         if caminho == "/api/auth/me":
             us = self.sessao()
@@ -1060,6 +1135,22 @@ class Handler(SimpleHTTPRequestHandler):
                     executa("DELETE FROM sessions WHERE token=?", (c[SESSION_COOKIE].value,))
             return self.json({"ok": True}, extra={
                 "Set-Cookie": f"{SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"})
+
+        # ---- ponte do Fatia: dar baixa do que a impressão gastou ----
+        # Fica ANTES do exige() porque o Fatia pede isto de servidor para
+        # servidor, com o token da ponte: não tem cookie de sessão nenhum.
+        if caminho in ("/api/fatia/gastar", "/api/fatia/gastar/anular"):
+            tok = str(corpo.get("token") or (q.get("token") or [""])[0])
+            if not hmac.compare_digest(tok, token_ponte()):
+                return self.erro("token inválido", 403)
+            d = dono()
+            if not d:
+                return self.erro("ainda não há utilizador nesta máquina", 404)
+            if caminho.endswith("/anular"):
+                r = self._gasto_anular(d["id"], str(corpo.get("chave") or ""), agora())
+            else:
+                r = self._gastar(d["id"], corpo, agora())
+            return self.erro(r["erro"]) if "erro" in r else self.json(r)
 
         us = self.exige()
         if not us:
@@ -1404,6 +1495,114 @@ class Handler(SimpleHTTPRequestHandler):
             executa("DELETE FROM locais WHERE id=? AND user_id=?", (lid, uid))
         executa("UPDATE planos SET estado='anulado' WHERE id=?", (pid,))
         return {"ok": True, "locais_mantidos": presos}
+
+    # ------------------------------------------------ baixas vindas do Fatia --
+
+    def _gastar(self, uid: int, corpo: dict, t: int) -> dict:
+        """Tira das bobines o que a impressão gastou.
+
+        Três decisões que não são óbvias:
+
+        - **idempotente pela `chave`**: o Fatia manda a mesma chave enquanto for
+          a mesma baixa do mesmo trabalho. Sem isto, carregar duas vezes no
+          botão (ou um refresh a meio) gastava a bobine duas vezes, e isso não
+          se desfaz sozinho.
+        - **guarda o restante anterior**, bobine a bobine, em `detalhe`. É o que
+          o anular usa; recalcular "somando de volta" mentia assim que o
+          `_apara` tivesse cortado alguma coisa.
+        - **uma bobine que estava selada passa a aberta** e leva a data de hoje
+          no `aberto_em` -- gastou-se dela, portanto foi aberta. O
+          `_estado_pelo_peso()` já dizia o mesmo; aqui só se lhe junta a data.
+        """
+        chave = str(corpo.get("chave") or "").strip()
+        if not chave:
+            return {"erro": "sem chave não há como evitar dar a mesma baixa duas vezes"}
+        ja = linha("SELECT * FROM gastos WHERE user_id=? AND chave=?", (uid, chave))
+        if ja and ja["estado"] == "aplicado":
+            d = json.loads(ja["detalhe"] or "{}")
+            return {"ok": True, "repetido": True, "id": ja["id"],
+                    "consumos": d.get("consumos", [])}
+
+        # somam-se os pedidos da mesma bobine: duas mesas podem gastar da mesma
+        pedidos: dict[int, float] = {}
+        for c in (corpo.get("consumos") or []):
+            try:
+                bid, g = int(c.get("bobine_id") or 0), float(c.get("gramas") or 0)
+            except (TypeError, ValueError):
+                continue
+            if bid > 0 and g > 0:
+                pedidos[bid] = pedidos.get(bid, 0.0) + g
+        if not pedidos:
+            return {"erro": "não veio nada para gastar"}
+
+        hoje = time.strftime("%Y-%m-%d")
+        consumos, avisos = [], []
+        for bid, g in pedidos.items():
+            b = linha("SELECT * FROM bobines WHERE id=? AND user_id=?", (bid, uid))
+            if not b:
+                avisos.append(f"bobine #{bid} desconhecida — ficou por gastar")
+                continue
+            antes = float(b["restante_g"] or 0)
+            peso = float(b["peso_liquido_g"] or 0)
+            depois = _apara(antes - g, peso)
+            estado = _estado_pelo_peso(b["estado"] or "selado", depois, peso)
+            aberto = b["aberto_em"] or ""
+            campos = {"restante_g": depois, "estado": estado}
+            if estado == "aberto" and not aberto:
+                campos["aberto_em"] = hoje
+            executa(f"UPDATE bobines SET {','.join(f'{k}=?' for k in campos)},"
+                    " actualizado_em=? WHERE id=? AND user_id=?",
+                    (*campos.values(), t, bid, uid))
+            if antes + 0.5 < g:
+                avisos.append(f"a bobine #{bid} só tinha {round(antes)} g "
+                              f"dos {round(g)} g que se gastaram dela")
+            consumos.append({"bobine_id": bid, "filamento_id": b["filamento_id"],
+                             "gramas": round(g, 1), "antes": round(antes, 1),
+                             "depois": round(depois, 1),
+                             "estado_antes": b["estado"] or "", "estado_depois": estado,
+                             "aberto_em_antes": aberto})
+        if not consumos:
+            return {"erro": "nenhuma das bobines indicadas é tua"}
+
+        detalhe = json.dumps({"ref": str(corpo.get("ref") or "")[:200], "consumos": consumos})
+        if ja:      # a mesma chave tinha sido anulada: volta a valer
+            executa("UPDATE gastos SET detalhe=?, estado='aplicado', criado_em=?,"
+                    " anulado_em=0 WHERE id=?", (detalhe, t, ja["id"]))
+            gid = ja["id"]
+        else:
+            gid = executa("INSERT INTO gastos(user_id,chave,ref,origem,detalhe,estado,criado_em)"
+                          " VALUES(?,?,?,'fatia',?,'aplicado',?)",
+                          (uid, chave, str(corpo.get("ref") or "")[:200], detalhe, t))
+        return {"ok": True, "id": gid, "consumos": consumos, "avisos": avisos}
+
+    def _gasto_anular(self, uid: int, chave: str, t: int) -> dict:
+        """Põe de volta o que uma baixa tirou.
+
+        Só devolve à bobine que ainda estiver **exactamente** como a baixa a
+        deixou. Se entretanto a bobine foi pesada à mão, ou gastou-se mais dela,
+        repor o valor antigo era apagar essa correcção -- nesse caso deixa-se
+        quieta e diz-se qual foi."""
+        g = linha("SELECT * FROM gastos WHERE user_id=? AND chave=?", (uid, chave))
+        if not g:
+            return {"erro": "essa baixa não existe"}
+        if g["estado"] != "aplicado":
+            return {"erro": "essa baixa já tinha sido anulada"}
+        d = json.loads(g["detalhe"] or "{}")
+        repostas, mexidas = [], []
+        for c in d.get("consumos", []):
+            b = linha("SELECT * FROM bobines WHERE id=? AND user_id=?", (c["bobine_id"], uid))
+            if not b:
+                continue
+            if abs(float(b["restante_g"] or 0) - float(c["depois"])) > 0.5:
+                mexidas.append(c["bobine_id"])
+                continue
+            executa("UPDATE bobines SET restante_g=?, estado=?, aberto_em=?,"
+                    " actualizado_em=? WHERE id=? AND user_id=?",
+                    (c["antes"], c["estado_antes"] or "selado", c.get("aberto_em_antes", ""),
+                     t, c["bobine_id"], uid))
+            repostas.append(c["bobine_id"])
+        executa("UPDATE gastos SET estado='anulado', anulado_em=? WHERE id=?", (t, g["id"]))
+        return {"ok": True, "repostas": repostas, "mexidas": mexidas}
 
     def _cookie(self, token: str) -> dict:
         return {"Set-Cookie":
