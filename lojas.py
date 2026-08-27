@@ -103,6 +103,40 @@ def _json(url: str, **kw) -> dict | list:
     return json.loads(_get(url, **kw).decode("utf-8", "replace"))
 
 
+def _primeiro_url(texto: str) -> str:
+    """Extrai o primeiro URL de texto colado.
+
+    No telemóvel é fácil colar o mesmo URL duas ou três vezes seguidas sem
+    espaços; para rotas conhecidas abaixo, basta manter o primeiro produto do
+    caminho e ignorar o resto."""
+    m = re.search(r"https?://[^\s<>'\"]+", texto or "", re.I)
+    if not m:
+        return ""
+    return m.group(0).strip(").,;")
+
+
+def _host(url: str) -> str:
+    h = urllib.parse.urlparse(url).netloc.lower()
+    return h[4:] if h.startswith("www.") else h
+
+
+def _canon_url(url: str) -> str:
+    u = urllib.parse.urlparse(url)
+    return f"{_host(url)}{u.path.rstrip('/')}"
+
+
+def _termos_do_url(url: str) -> str:
+    u = urllib.parse.urlparse(url)
+    path = urllib.parse.unquote(u.path)
+    m = re.search(r"/produto/([^/?#]+)", path)
+    if not m:
+        m = re.search(r"/products/([^/?#]+)", path)
+    slug = m.group(1) if m else os.path.basename(path.rstrip("/"))
+    slug = re.sub(r"\.html?$", "", slug)
+    slug = re.sub(r"^(?:\d+-)+", "", slug)
+    return re.sub(r"[-_]+", " ", slug).strip()
+
+
 def _txt(s) -> str:
     """Tira tags e desfaz entidades -- os títulos da Woo vêm com &#8211; lá dentro."""
     if not s:
@@ -256,6 +290,14 @@ def _evolt_produto(p: dict) -> dict:
         moeda=precos.get("currency_code", "EUR"), ref=str(p.get("sku") or ""))
 
 
+def _evolt_por_slug(slug: str) -> dict | None:
+    url = EVOLT_API + "?" + urllib.parse.urlencode(
+        {"slug": slug, "per_page": 1, "status": "publish",
+         "_fields": "id,name,prices,permalink,images,sku,is_in_stock"})
+    dados = _json(url) or []
+    return _evolt_produto(dados[0]) if dados else None
+
+
 def busca_evolt(q: str, limite: int = 12) -> list[dict]:
     """A Evolt precisa de tratamento especial, e a razão é esta:
 
@@ -347,7 +389,8 @@ def _busca_shopify(loja: str, base: str, q: str, limite: int = 12) -> list[dict]
         preco = _num(p.get("price"))
         img = p.get("featured_image") or p.get("image") or ""
         if isinstance(img, dict):
-            img = img.get("url", "")
+            img = img.get("url") or ""
+        img = str(img or "")
         if img.startswith("//"):
             img = "https:" + img
         if img and "cdn.shopify.com" in img:
@@ -366,6 +409,29 @@ def busca_qidi(q: str, limite: int = 12) -> list[dict]:
 
 def busca_elegoo(q: str, limite: int = 12) -> list[dict]:
     return _busca_shopify("elegoo", "https://eu.elegoo.com", q, limite)
+
+
+def _shopify_por_slug(loja: str, base: str, slug: str) -> dict | None:
+    dados = _json(f"{base}/products/{urllib.parse.quote(slug)}.js")
+    if not isinstance(dados, dict) or not dados.get("title"):
+        return None
+    preco = dados.get("price")
+    if isinstance(preco, int):
+        preco = preco / 100
+    img = dados.get("featured_image") or ""
+    if isinstance(img, dict):
+        img = img.get("src") or img.get("url") or ""
+    img = str(img or "")
+    if img.startswith("//"):
+        img = "https:" + img
+    elif img.startswith("/"):
+        img = urllib.parse.urljoin(base, img)
+    if img and "cdn.shopify.com" in img:
+        img += ("&" if "?" in img else "?") + "width=240"
+    return _produto(
+        loja, titulo=_txt(dados.get("title")), preco=_num(preco),
+        url=f"{base}/products/{slug}", imagem=img,
+        stock=dados.get("available"), marca=_txt(dados.get("vendor")))
 
 
 # --------------------------------------------------------------- RepRap (PT) --
@@ -520,8 +586,11 @@ def traduz(q: str, alvo: str) -> str:
         hits = _INDEX.get(token, [])
         cor = next((h for h in hits if h["g"] == "cor"), None)
         outro = next((h for h in hits if h["g"] in ("marca", "material")), None)
-        if outro:                                   # marcas e materiais não se traduzem
-            saida.append(outro["c"])
+        if outro:
+            # "wood/marble/cork" vivem no material canónico "compositos" para a
+            # pesquisa por sinónimos, mas mandar "compositos" à loja é perder a
+            # palavra que ela realmente usa no título.
+            saida.append(token if outro["c"] == "compositos" else outro["c"])
         elif cor:
             saida.append(cor["c"] if alvo == "pt" else CORES[cor["c"]][0])
         else:
@@ -532,17 +601,30 @@ def traduz(q: str, alvo: str) -> str:
 def termo_selectivo(q: str) -> str:
     """O termo por onde vale a pena pedir a lista larga a uma loja.
 
-    Materiais primeiro (conjunto pequeno e escrito igual em toda a parte),
-    marcas a seguir. Cores ficam de fora de propósito: pedir "preto" a uma loja
-    que cataloga em inglês devolve zero, e é justamente isso que se quer evitar."""
+    Marca primeiro, porque quase sempre é mais estreita que `pla`. Depois vêm
+    materiais compostos escritos no título (`wood`, `marble`, `cork`), e só no
+    fim os materiais base. Cores ficam de fora de propósito: pedir "preto" a uma
+    loja que cataloga em inglês devolve zero."""
     toks = [t for t in norm(q).split() if len(t) > 1]
     if not toks:
         return ""
-    for grupo in ("material", "marca"):
-        for t in toks:
-            hit = next((h for h in _INDEX.get(t, []) if h["g"] == grupo), None)
-            if hit:
-                return hit["c"] if grupo == "material" else t
+    for t in toks:
+        hit = next((h for h in _INDEX.get(t, []) if h["g"] == "marca"), None)
+        if hit:
+            aliases = GRUPOS["marca"].get(hit["c"], [])
+            return aliases[0] if aliases else t
+    genericos = {"pla", "petg", "pctg", "abs", "asa", "tpu", "nylon", "pc",
+                 "pva", "hips", "pp", "peek", "resina"}
+    materiais: list[tuple[int, str]] = []
+    for t in toks:
+        hit = next((h for h in _INDEX.get(t, []) if h["g"] == "material"), None)
+        if not hit:
+            continue
+        termo = t if hit["c"] == "compositos" or t not in genericos else hit["c"]
+        materiais.append((0 if termo in genericos else 1, termo))
+    if materiais:
+        materiais.sort(key=lambda x: (x[0], len(x[1])), reverse=True)
+        return materiais[0][1]
     naocor = [t for t in toks
               if not any(h["g"] in ("cor", "formato") for h in _INDEX.get(t, []))]
     return max(naocor or toks, key=len)
@@ -567,6 +649,63 @@ ADAPTADORES = {
     "reprap": busca_reprap,
     "amazon": busca_amazon,
 }
+
+
+def loja_do_url(url: str) -> str:
+    h = _host(url)
+    if h.endswith("evolt.pt"):
+        return "evolt"
+    if h.endswith("corexy.pt"):
+        return "corexy"
+    if h.endswith("qidi3d.com"):
+        return "qidi"
+    if h.endswith("elegoo.com"):
+        return "elegoo"
+    if h.endswith("reprap.pt"):
+        return "reprap"
+    if h.endswith("amazon.es") or h.endswith("amazon.de"):
+        return "amazon"
+    return ""
+
+
+def produto_por_url(texto: str) -> dict:
+    """Lê um produto a partir de um link colado.
+
+    A Evolt é resolvida por `slug`, porque a pesquisa textual da WooCommerce
+    pode devolver zero mesmo quando a página existe. As restantes lojas usam o
+    adaptador directo quando há API simples, ou a pesquisa existente limitada à
+    loja do URL como fallback."""
+    url = _primeiro_url(texto)
+    if not url:
+        raise ValueError("cola um link de produto")
+    loja = loja_do_url(url)
+    if not loja:
+        raise ValueError("essa loja ainda não está ligada ao Bobina")
+
+    u = urllib.parse.urlparse(url)
+    path = urllib.parse.unquote(u.path)
+    prod = None
+    if loja == "evolt":
+        m = re.search(r"/produto/([^/?#]+)", path)
+        if not m:
+            raise ValueError("link da Evolt sem produto")
+        prod = _evolt_por_slug(m.group(1))
+    elif loja in ("qidi", "elegoo"):
+        m = re.search(r"/products/([^/?#]+)", path)
+        if m:
+            base = LOJAS[loja]["url"]
+            prod = _shopify_por_slug(loja, base, m.group(1))
+
+    if not prod:
+        alvo = _canon_url(url)
+        resultados = busca(_termos_do_url(url), [loja], limite=20)["resultados"]
+        prod = next((p for p in resultados if _canon_url(p.get("url", "")) == alvo), None)
+        prod = prod or (resultados[0] if resultados else None)
+    if not prod:
+        raise ValueError("não consegui ler esse produto")
+    prod["relevancia"] = 1.0
+    prod["filamento"] = e_filamento(prod["titulo"])
+    return prod
 
 
 def _variantes(q: str, loja: str) -> list[str]:

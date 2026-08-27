@@ -7,6 +7,7 @@ um index.html só, SQLite no SSD (nunca em exFAT — ver a nota do Jellyfin).
 from __future__ import annotations
 
 import argparse
+import difflib
 import gzip
 import hashlib
 import hmac
@@ -30,7 +31,7 @@ import lexicon
 import lojas
 
 ROOT = Path(__file__).resolve().parent
-VERSAO = "1.10.0"
+VERSAO = "1.10.3"
 SESSION_COOKIE = "bobina_session"
 SESSION_DIAS = int(os.environ.get("BOBINA_SESSION_DAYS", "30"))
 MAX_BODY = int(os.environ.get("BOBINA_MAX_BODY", "2097152"))
@@ -283,6 +284,59 @@ def canon(texto: str, grupo: str) -> str:
     return " ".join(toks)
 
 
+COR_IDENTIDADE: dict[str, list[str]] = {
+    "preto": ["preto", "black", "negro", "noir", "schwarz", "nero"],
+    "branco": ["branco", "white", "blanco", "blanc", "weiss", "bianco"],
+    "cinzento": ["cinzento", "cinza", "grey", "gray", "gris", "grau"],
+    "vermelho": ["vermelho", "red", "rojo", "rouge", "rot", "rosso"],
+    "azul": ["azul", "blue", "bleu", "blau", "blu"],
+    "verde": ["verde", "green", "gruen", "grun"],
+    "amarelo": ["amarelo", "yellow", "amarillo", "gelb", "giallo"],
+    "laranja": ["laranja", "orange", "naranja", "arancione"],
+    "roxo": ["roxo", "purple", "violet", "violeta", "lila"],
+    "rosa": ["rosa", "pink", "rose"],
+    "castanho": ["castanho", "brown", "marron", "marrom", "braun"],
+    "transparente": ["transparente", "transparent", "translucido", "translucent"],
+    "madeira": ["wood", "madeira"],
+    "maple": ["maple"],
+    "oak": ["oak", "carvalho"],
+    "walnut": ["walnut", "nogueira"],
+    "cork": ["cork", "cortica"],
+    "marble": ["marble", "marmore"],
+}
+COR_IDENT_ALIAS = {lexicon.norm(a): c for c, als in COR_IDENTIDADE.items() for a in als}
+COR_IDENT_ALIASES = list(COR_IDENT_ALIAS)
+
+
+def _cor_ident_token(tok: str) -> str:
+    if tok in COR_IDENT_ALIAS:
+        return COR_IDENT_ALIAS[tok]
+    if len(tok) >= 4:
+        m = difflib.get_close_matches(tok, COR_IDENT_ALIASES, n=1, cutoff=0.8)
+        if m:
+            return COR_IDENT_ALIAS[m[0]]
+    return tok
+
+
+def chave_cor(texto: str, material: str = "") -> str:
+    """A cor para identidade é deliberadamente mais estreita que a cor de grupo.
+
+    A pesquisa continua a saber que `wood`, `oak` e `walnut` são castanhos, mas
+    isso não pode servir para juntar bobines diferentes. Aqui só normalizamos
+    caixa, espaços, línguas e pequenos typos; palavras de material repetidas na
+    cor saem quando há mais detalhe (`PLA Wood` + `Wood White` = `branco`)."""
+    toks = [t for t in re.sub(r"[-/_+]+", " ", lexicon.norm(texto or "")).split() if t]
+    if not toks:
+        return ""
+    mat = set(re.sub(r"[-/_+]+", " ", lexicon.norm(material or "")).split())
+    if len(toks) > 1 and mat:
+        sem_mat = [t for t in toks if t not in mat]
+        if sem_mat:
+            toks = sem_mat
+    partes = [_cor_ident_token(t) for t in toks]
+    return " ".join(sorted(set(partes)))
+
+
 def chave_material(texto: str) -> str:
     """O material para efeitos de IDENTIDADE, que não é o mesmo que para pesquisa.
 
@@ -301,7 +355,8 @@ def filamento_igual(uid: int, f: dict) -> dict | None:
 
     Comparar texto não chegava: a mesma bobine comprada na Evolt ("Black") e na
     Core XY ("Preto") ficava em dois grupos separados, com dois históricos de
-    preço e duas contagens. Compara-se por marca, material e cor CANÓNICOS.
+    preço e duas contagens. Marca e material continuam canónicos; a cor é mais
+    rígida para não juntar `Wood White` com `Wood Maple`.
 
     O peso não entra na conta. Um PETG Glacier White de 250 g e um de 1 kg são o
     mesmo filamento comprado em tamanhos diferentes -- e como cada bobine guarda
@@ -310,7 +365,7 @@ def filamento_igual(uid: int, f: dict) -> dict | None:
     def chave(x: dict) -> tuple:
         return (canon(x.get("marca"), "marca"),
                 chave_material(x.get("material")),
-                canon(x.get("cor"), "cor"))
+                chave_cor(x.get("cor"), x.get("material")))
 
     alvo = chave(f)
     for existente in linhas("SELECT * FROM filamentos WHERE user_id=?", (uid,)):
@@ -1102,6 +1157,14 @@ class Handler(SimpleHTTPRequestHandler):
         m = re.match(r"^/api/filamentos/(\d+)/precos$", caminho)
         if m and metodo == "POST":
             return self.json(actualiza_precos(int(m.group(1)), uid))
+
+        if caminho == "/api/lojas/produto" and metodo == "POST":
+            try:
+                return self.json({"produto": lojas.produto_por_url(corpo.get("url") or "")})
+            except ValueError as e:
+                return self.erro(str(e))
+            except Exception as e:  # noqa: BLE001
+                return self.erro(f"não consegui ler esse produto: {e}", 502)
 
         # ---- bobines ----
         if caminho == "/api/bobines" and metodo == "POST":

@@ -81,9 +81,10 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:12p
   color:var(--dim);font-variant-numeric:tabular-nums;pointer-events:none}
 .searchbox .clr{position:absolute;right:8px;top:50%;transform:translateY(-50%);min-height:30px;
   padding:4px 9px;border-radius:8px}
-.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-.chip{font-size:11.5px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);
-  background:var(--panel2);color:var(--dim);cursor:pointer}
+.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.chip{display:inline-flex;align-items:center;justify-content:center;min-height:26px;
+  font-size:11.5px;line-height:1;padding:0 9px;border-radius:999px;border:1px solid var(--line);
+  background:var(--panel2);color:var(--dim);cursor:pointer;user-select:none}
 .chip:hover{border-color:var(--accent);color:var(--txt)}
 .chip.on{background:var(--accent);color:#160b33;border-color:var(--accent)}
 /* Interruptor: o próprio botão é a marca. Ligado toma o roxo da app — o mesmo
@@ -268,11 +269,11 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   <div class="card" style="margin-bottom:12px">
     <h2>Procurar nas lojas</h2>
     <div class="sub" style="margin-bottom:10px">Evolt e Core XY (PT), QIDI EU, Elegoo EU e Amazon.
-      Escreve em português ou inglês — a pesquisa é traduzida para cada loja.</div>
+      Escreve em português, inglês ou cola o link do produto.</div>
     <div class="searchbox">
       <svg class="mag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-      <input id="sq" placeholder="ex.: PETG preto 1kg" autocomplete="off">
+      <input id="sq" placeholder="ex.: PETG preto 1kg ou link da loja" autocomplete="off">
       <span class="cnt" id="sqCnt"></span>
     </div>
     <div class="chips" id="sqLojas" style="margin-top:10px"></div>
@@ -477,7 +478,7 @@ function expande(tok) {
 /* Um termo casa se aparecer tal como foi escrito (para quem ainda vai a meio da
    palavra) ou se algum sinónimo seu aparecer no início de uma palavra. */
 function casaTermo(hay, t) {
-  if (hay.includes(t)) return true;
+  if (!LEX.index[t]?.length && hay.includes(t)) return true;
   return expande(t).some(a => new RegExp('(?<![a-z0-9])' + escRe(a)).test(hay));
 }
 function casa(hay, termos) { return termos.every(t => casaTermo(hay, t)); }
@@ -615,7 +616,9 @@ const CAIXA_MINI = `<svg viewBox="0 0 48 48" width="13" height="13" style="verti
   <path d="M8 18 h32 v20 a3 3 0 0 1 -3 3 h-26 a3 3 0 0 1 -3 -3 z" stroke-linejoin="round"/>
   <rect x="5" y="9" width="38" height="9" rx="2"/></svg>`;
 
-const corDoFil = f => f.cor_hex || corDe(f.cor) || NEUTRA;
+const textoCorFil = f => [f.material, f.cor].filter(Boolean).join(' ');
+const corDoFil = f => f.cor_hex || corDe(textoCorFil(f)) || corDe(f.cor) || NEUTRA;
+const transpDoFil = f => eTransparente(textoCorFil(f)) || eTransparente(f.cor);
 /* Duas cores por filamento, e só estas duas em toda a app:
    - `tinta` é a cor legível sobre o fundo escuro (a verdadeira, puxada para
      cima quando é escura de mais). Serve os traços da bobine, a moldura da
@@ -664,8 +667,8 @@ const fotoURL = u => '/api/imagem?u=' + encodeURIComponent(u);
 function media(f, tam, bs) {
   const est = estadoCaixa(bs || vivas(f));
   const desenho = est === 'nenhuma'
-    ? bobinaSVG(corDoFil(f), tam, eTransparente(f.cor))
-    : caixaSVG(corDoFil(f), tam, eTransparente(f.cor), est === 'algumas');
+    ? bobinaSVG(corDoFil(f), tam, transpDoFil(f))
+    : caixaSVG(corDoFil(f), tam, transpDoFil(f), est === 'algumas');
   // a escolha de aparência manda sobre o que está gravado, sem lhe mexer
   if (VER.imagem === 'desenho') return desenho;
   const preferirFoto = VER.imagem === 'foto' ? true : !f.icone;
@@ -934,6 +937,65 @@ function corCanonica(txt) {
   return '';
 }
 const capitaliza = t => t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+const COR_IDENTIDADE = {
+  preto: ['preto', 'black', 'negro', 'noir', 'schwarz', 'nero'],
+  branco: ['branco', 'white', 'blanco', 'blanc', 'weiss', 'bianco'],
+  cinzento: ['cinzento', 'cinza', 'grey', 'gray', 'gris', 'grau'],
+  vermelho: ['vermelho', 'red', 'rojo', 'rouge', 'rot', 'rosso'],
+  azul: ['azul', 'blue', 'bleu', 'blau', 'blu'],
+  verde: ['verde', 'green', 'gruen', 'grun'],
+  amarelo: ['amarelo', 'yellow', 'amarillo', 'gelb', 'giallo'],
+  laranja: ['laranja', 'orange', 'naranja', 'arancione'],
+  roxo: ['roxo', 'purple', 'violet', 'violeta', 'lila'],
+  rosa: ['rosa', 'pink', 'rose'],
+  castanho: ['castanho', 'brown', 'marron', 'marrom', 'braun'],
+  transparente: ['transparente', 'transparent', 'translucido', 'translucent'],
+  madeira: ['wood', 'madeira'],
+  maple: ['maple'],
+  oak: ['oak', 'carvalho'],
+  walnut: ['walnut', 'nogueira'],
+  cork: ['cork', 'cortica'],
+  marble: ['marble', 'marmore'],
+};
+const COR_IDENT_ALIAS = (() => {
+  const m = new Map();
+  for (const [c, als] of Object.entries(COR_IDENTIDADE)) als.forEach(a => m.set(norm(a), c));
+  return m;
+})();
+const distCurta = (a, b) => {
+  if (a === b) return 0;
+  if (Math.abs(a.length - b.length) > 2) return 3;
+  const dp = Array.from({length: a.length + 1}, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1,
+      dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  }
+  return dp[a.length][b.length];
+};
+function corIdentTok(tok) {
+  if (COR_IDENT_ALIAS.has(tok)) return COR_IDENT_ALIAS.get(tok);
+  if (tok.length >= 4) {
+    for (const a of COR_IDENT_ALIAS.keys()) {
+      const d = distCurta(tok, a);
+      if (d <= 1 || (tok.length >= 6 && d <= 2)) return COR_IDENT_ALIAS.get(a);
+    }
+  }
+  return tok;
+}
+function corIdentidade(txt, material) {
+  let toks = norm(txt || '').replace(/[-\/_+]/g, ' ').split(' ').filter(Boolean);
+  if (!toks.length) return '';
+  const mat = new Set(norm(material || '').replace(/[-\/_+]/g, ' ').split(' ').filter(Boolean));
+  if (toks.length > 1 && mat.size) {
+    const semMat = toks.filter(t => !mat.has(t));
+    if (semMat.length) toks = semMat;
+  }
+  return [...new Set(toks.map(corIdentTok))].sort().join(' ');
+}
+function chaveMaterial(txt) {
+  return norm(txt || '').replace(/\bplus\b/g, '+').replace(/[\s-]+/g, '');
+}
 
 /* Sub-ordenação dentro de cada grupo (e da lista seguida). */
 const ORDENADORES = {
@@ -1167,7 +1229,8 @@ async function abreFilamento(fid) {
   let hexDet = f.cor_hex || '';
   const prevDet = dlg.querySelector('#fPrev');
   const desenhaDet = () => {
-    const nome = dlg.querySelector('#fCor').value;
+    const nome = [dlg.querySelector('#fMat').value, dlg.querySelector('#fCor').value]
+      .filter(Boolean).join(' ');
     const c = hexDet || corDe(nome) || NEUTRA;
     const marcadas = [...dlg.querySelectorAll('[data-k="caixa"]')];
     const comCaixa = marcadas.filter(x => x.checked).length;
@@ -1201,6 +1264,7 @@ async function abreFilamento(fid) {
     pesoAntigo = novo;
   });
   const leHexDet = ligaPicker(dlg, 'det', v => { hexDet = v; desenhaDet(); });
+  dlg.querySelector('#fMat').addEventListener('input', desenhaDet);
   dlg.querySelector('#fCor').addEventListener('input', desenhaDet);
   const togIcone = dlg.querySelector('#fIcone');
   if (togIcone) togIcone.onchange = () => {
@@ -1356,6 +1420,7 @@ async function abreFilamento(fid) {
 
 /* ============================ lojas: procurar e adicionar ============================ */
 let sqTimer;
+const entradaTemURL = s => /\bhttps?:\/\/[^\s/]+\.[^\s]+/i.test(s || '');
 function desenhaLojas() {
   $('#sqLojas').innerHTML = Object.entries(INV.lojas).map(([k, v]) =>
     `<span class="chip${LOJAS_SEL.has(k) ? ' on' : ''}" data-loja="${esc(k)}">${esc(v.nome)}</span>`).join('');
@@ -1366,7 +1431,13 @@ async function procuraLojas() {
   $('#sqCnt').textContent = '…';
   const lojas = [...LOJAS_SEL].join(',');
   try {
-    const r = await api('/api/lojas/busca?q=' + encodeURIComponent(q) + (lojas ? '&lojas=' + lojas : ''));
+    let r;
+    if (entradaTemURL(q)) {
+      const p = await api('/api/lojas/produto', {method: 'POST', body: JSON.stringify({url: q})});
+      r = {resultados: p.produto ? [p.produto] : [], erros: {}};
+    } else {
+      r = await api('/api/lojas/busca?q=' + encodeURIComponent(q) + (lojas ? '&lojas=' + lojas : ''));
+    }
     $('#sqCnt').textContent = r.resultados.length;
     const erros = Object.entries(r.erros || {});
     $('#hits').innerHTML =
@@ -1435,11 +1506,11 @@ const nomeDaMarca = c => (LEX.marcas_nome && LEX.marcas_nome[c]) || c;
    coisa: marca, material e cor reduzidos ao canónico. Aqui serve só para pôr os
    parecidos à cabeça da lista de juntar. */
 function chaveFil(f) {
-  const c = g => {
+  const cMarca = g => {
     const cand = achaFacetas([f.marca, f.material, f.cor].join(' '))[g];
     return escolheFaceta(cand) || '';
   };
-  return [c('marca'), c('material'), corCanonica(f.cor)].join('|');
+  return [cMarca('marca'), chaveMaterial(f.material), corIdentidade(f.cor, f.material)].join('|');
 }
 
 /* Sufixos que fazem parte do NOME do material e não da cor. Sem eles, "PETG Pro"
@@ -1449,7 +1520,10 @@ const QUALIF_MAT = {'+': '+', 'plus': '+', 'pro': 'Pro', 'max': 'Max', 'basic': 
   'hf': 'HF', 'lw': 'LW', 'aero': 'Aero', 'cf': 'CF', 'gf': 'GF', 'x': 'X',
   'tough': 'Tough', 'premium': 'Premium', 'ultra': 'Ultra', 'hs': 'HS', 'ht': 'HT',
   'prime': 'Prime', 'lite': 'Lite', 'matte': 'Matte', 'silk': 'Silk', 'meta': 'Meta',
-  'rapid': 'Rapid', 'eco': 'Eco', 'flex': 'Flex', 'soft': 'Soft'};
+  'rapid': 'Rapid', 'eco': 'Eco', 'flex': 'Flex', 'soft': 'Soft',
+  'wood': 'Wood', 'madeira': 'Wood', 'woodfill': 'Wood',
+  'marble': 'Marble', 'marmore': 'Marble', 'cork': 'Cork', 'cortica': 'Cork',
+  'glow': 'Glow', 'gitd': 'Glow'};
 
 function materialFrase(texto) {
   const toks = norm(texto || '').split(' ').filter(Boolean);
@@ -1508,7 +1582,8 @@ function adivinha(titulo, extra) {
 }
 
 async function adicionaDeLoja(p) {
-  const g = adivinha(p.titulo, {marcaLoja: p.marca, consulta: ($('#sq').value || '')});
+  const consulta = entradaTemURL($('#sq').value) ? '' : ($('#sq').value || '');
+  const g = adivinha(p.titulo, {marcaLoja: p.marca, consulta});
   const dlg = document.createElement('dialog');
   dlg.innerHTML = `<div class="dlg"><h2>Adicionar</h2>
     <div class="sub" style="margin-bottom:12px">${esc(p.titulo)}</div>
@@ -1551,7 +1626,8 @@ async function adicionaDeLoja(p) {
   const prev = dlg.querySelector('#xPrev');
   let hexEscolhido = '';
   const desenha = () => {
-    const nome = dlg.querySelector('#xCor').value;
+    const nome = [dlg.querySelector('#xMat').value, dlg.querySelector('#xCor').value]
+      .filter(Boolean).join(' ');
     const c = hexEscolhido || corDe(nome) || NEUTRA;
     const desenhar = (dlg.querySelector('#xIcone') || {}).checked;
     const usaFoto = p.imagem && !desenhar;
@@ -1625,6 +1701,7 @@ async function adicionaDeLoja(p) {
         const x = bons[+a.dataset.pp];
         campoPreco.value = x.preco; precoTocado = true;
         dlg.querySelector('#xPeso').value = x.peso_g;   // o peso é o do produto escolhido
+        if (restSegue) rest.value = x.peso_g;
         cheio();
         const sel = dlg.querySelector('#xLoja');
         if (sel && [...sel.options].some(o => o.value === x.loja)) sel.value = x.loja;
@@ -1637,15 +1714,17 @@ async function adicionaDeLoja(p) {
      abrir o detalhe. Com várias esconde-se: não se sabe qual delas é qual. */
   const qtd = dlg.querySelector('#xQtd'), rest = dlg.querySelector('#xRest');
   const peso = dlg.querySelector('#xPeso');
+  let restSegue = true;
   const cheio = () => { rest.max = +peso.value || ''; if (+rest.value > +peso.value) rest.value = peso.value; };
   const soUma = () => { dlg.querySelector('#xRestWrap').hidden = +qtd.value !== 1; };
   qtd.oninput = soUma;
   peso.addEventListener('input', () => {
-    if (rest.value === '' || +rest.value === 0) rest.value = peso.value;
+    if (restSegue) rest.value = peso.value;
     cheio(); ajustaPreco();
   });
-  rest.oninput = cheio;
+  rest.oninput = () => { restSegue = false; cheio(); };
   soUma(); cheio();
+  dlg.querySelector('#xMat').addEventListener('input', desenha);
   dlg.querySelector('#xCor').addEventListener('input', desenha);
   desenha();
   dlg.querySelector('#xOk').onclick = async () => {
@@ -1941,7 +2020,7 @@ function montaPickerManual() {
   const prev = $('#mPrev');
   let escolhido = '';
   const desenha = () => {
-    const nome = $('#mCor').value;
+    const nome = [$('#mMat').value, $('#mCor').value].filter(Boolean).join(' ');
     const c = escolhido || corDe(nome) || NEUTRA;
     prev.innerHTML = bobinaSVG(c, 46, eTransparente(nome))
       + `<div class="sub">${escolhido ? 'cor escolhida'
@@ -1960,9 +2039,14 @@ function montaPickerManual() {
   const cheioM = () => { const pz = +$('#mPeso').value || 0;
     $('#mRest').max = pz || ''; if (+$('#mRest').value > pz) $('#mRest').value = pz; };
   $('#mQtd').oninput = soUmaM;
-  $('#mPeso').oninput = () => { if (!+$('#mRest').value) $('#mRest').value = $('#mPeso').value; cheioM(); };
-  $('#mRest').oninput = cheioM;
+  $('#mRest').dataset.seguePeso = '1';
+  $('#mPeso').oninput = () => {
+    if ($('#mRest').dataset.seguePeso !== '0') $('#mRest').value = $('#mPeso').value;
+    cheioM();
+  };
+  $('#mRest').oninput = () => { $('#mRest').dataset.seguePeso = '0'; cheioM(); };
   soUmaM(); cheioM();
+  $('#mMat').addEventListener('input', desenha);
   $('#mCor').addEventListener('input', desenha);
   desenha();
 }
@@ -1997,7 +2081,7 @@ async function entrar(registar) {
 }
 
 async function arranca() {
-  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon')]);
+  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.10.3')]);
   LEX = lex;
   if (!me.user) {
     $('#gate').hidden = false;
@@ -2067,6 +2151,7 @@ $('#mAdd').onclick = async () => {
     })});
     ['#mMarca', '#mMat', '#mCor', '#mPreco'].forEach(i => $(i).value = '');
     $('#mRest').value = $('#mPeso').value;
+    $('#mRest').dataset.seguePeso = '1';
     await carrega();
     toast(r.juntou ? `juntei a "${r.juntou}" — ficas com ${r.total_bobines} bobines`
                    : 'adicionado', 4000);
