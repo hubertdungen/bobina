@@ -3,3 +3,6 @@ __pycache__/
 *.db
 *.db-wal
 *.db-shm
+
+# worktrees de sessões do Claude Code, que aparecem cá dentro
+.claude/
