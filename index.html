@@ -129,7 +129,7 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:12p
 .mediacol{display:flex;flex-direction:column;align-items:center;gap:5px;flex:none}
 .matbadge{font-size:9.5px;font-weight:800;letter-spacing:.6px;line-height:1;
   padding:3px 0;border-radius:6px;width:100%;text-align:center;
-  border:1px solid currentColor;background:rgba(255,255,255,.05)}
+  border:1px solid currentColor}
 .foto{flex:none;object-fit:contain;border-radius:10px;background:#fff}
 /* selector de cor: botões de amostra + roda RGB + voltar ao automático */
 .paleta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}
@@ -572,7 +572,7 @@ const eTransparente = txt => /transp|clear|natural|cristal|crystal|vidro|glass/.
 /* Bobine vista de frente, em traço: aro, filamento enrolado com a folga por onde
    sai a ponta, e o núcleo. Mesma linguagem do logótipo, em pequeno. */
 function bobinaSVG(cor, tam, transp) {
-  const c = cor || NEUTRA, linha = visivel(c);
+  const c = cor || NEUTRA, linha = visivel(c);   // mesma regra que `tinta()`
   return `<svg class="bob" viewBox="0 0 48 48" width="${tam}" height="${tam}" aria-hidden="true">
     <circle cx="24" cy="24" r="20.5" fill="none" stroke="${linha}" stroke-width="1.8" opacity=".75"/>
     <path d="M35.69 30.75 A13.5 13.5 0 1 1 35.69 17.25" fill="none" stroke="${c}"
@@ -616,6 +616,16 @@ const CAIXA_MINI = `<svg viewBox="0 0 48 48" width="13" height="13" style="verti
   <rect x="5" y="9" width="38" height="9" rx="2"/></svg>`;
 
 const corDoFil = f => f.cor_hex || corDe(f.cor) || NEUTRA;
+/* Duas cores por filamento, e só estas duas em toda a app:
+   - `tinta` é a cor legível sobre o fundo escuro (a verdadeira, puxada para
+     cima quando é escura de mais). Serve os traços da bobine, a moldura da
+     caixa, o contorno da foto e o texto da etiqueta.
+   - `corDoFil` é a cor VERDADEIRA, sem retoque, e só aparece onde é filamento:
+     o enrolado da bobine e o fundo da etiqueta.
+   Antes a etiqueta tinha fundo branco translúcido e ficava a destoar do que
+   estava mesmo ao lado. */
+const tinta = f => visivel(corDoFil(f));
+const tinge = (hex, a) => hex + Math.round(a * 255).toString(16).padStart(2, '0');
 /* O material SEM o subtipo: "PETG Pro" e "PETG Matte" são ambos PETG, "PLA+" é
    PLA. É o canónico do léxico -- o mesmo que faz a pesquisa por "pla" achar os
    PLA+ -- e é o que se quer numa etiqueta de relance. */
@@ -645,8 +655,13 @@ function media(f, tam, bs) {
   const preferirFoto = VER.imagem === 'foto' ? true : !f.icone;
   if (preferirFoto && f.imagem) {
     const alt = desenho.replace(/"/g, '&quot;');
-    return `<img class="foto" src="${esc(fotoURL(f.imagem))}" width="${tam}" height="${tam}"
-      loading="lazy" alt="" data-alt="${alt}" onerror="this.outerHTML=this.dataset.alt">`;
+    /* O estado da caixa tem de se ver também nas fotos, senão metade do
+       inventário não o mostrava: moldura inteira quando estão todas na caixa,
+       a tracejado quando é mistura, nenhuma quando não têm. */
+    const traco = est === 'nenhuma' ? ''
+      : `border:2px ${est === 'algumas' ? 'dashed' : 'solid'} ${tinta(f)};`;
+    return `<img class="foto" style="${traco}" src="${esc(fotoURL(f.imagem))}" width="${tam}"
+      height="${tam}" loading="lazy" alt="" data-alt="${alt}" onerror="this.outerHTML=this.dataset.alt">`;
   }
   return desenho;
 }
@@ -843,7 +858,8 @@ function cartao(f, termos, bs) {
   return `<div class="spool${vazio ? ' semstock' : ''}" data-fil="${f.id}">
     <div class="mediacol" style="width:44px">${media(f, 44, bs)}${
       VER.etiqueta && materialBase(f)
-        ? `<span class="matbadge" style="color:${esc(visivel(corDoFil(f)))}">${esc(materialBase(f))}</span>`
+        ? `<span class="matbadge" style="color:${esc(tinta(f))};background:${
+             esc(tinge(corDoFil(f), .22))}">${esc(materialBase(f))}</span>`
         : ''}</div>
     <div style="min-width:0;flex:1">
       <div class="nm">${realca(nome || 'sem nome', termos)}</div>
