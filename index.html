@@ -166,6 +166,9 @@ input[type=color]{width:44px;height:32px;min-height:32px;padding:2px;cursor:poin
 .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--deep),var(--accent2))}
 .qty{margin-left:auto;text-align:right;flex:none}
 .qty b{font-size:17px;font-variant-numeric:tabular-nums}
+/* o filamento tem bobines noutro local: sem isto o cartao parecia dizer que
+   o filamento inteiro era so aquilo, e a ordenacao ao lado nao batia certo */
+.spool .alhures{color:var(--accent2);white-space:nowrap}
 .empty{text-align:center;color:var(--dim);padding:38px 16px;font-size:14px}
 
 /* ---- resultados de loja ---- */
@@ -869,7 +872,10 @@ function valorRestante(b) {
   const kg = precoKg(PORLOC[b.filamento_id]);
   return kg ? rest * kg / 1000 : 0;
 }
-const restante = f => vivas(f).reduce((a, b) => a + (b.estado === 'vazio' ? 0 : (+b.restante_g || 0)), 0);
+const somaRestante = bs => (bs || []).reduce(
+  (a, b) => a + (b.estado === 'vazio' ? 0 : (+b.restante_g || 0)), 0);
+const restante = f => somaRestante(vivas(f));
+const nomeFil = f => [f.marca, f.material, f.cor].filter(Boolean).join(' ');
 
 /* ============================ pesquisa ============================ */
 function termosDe(q) { return norm(q).split(' ').filter(Boolean); }
@@ -878,7 +884,7 @@ function resultados(q) {
   const termos = termosDe(q);
   let fs = INV.filamentos;
   if (termos.length) fs = fs.filter(f => casa(HAY[f.id] || '', termos));
-  // a ordem é escolhida no menu (ordenaFilamentos); aqui só se filtra
+  // a ordem é escolhida no menu (ordenaPares); aqui só se filtra
   return fs;
 }
 
@@ -897,12 +903,22 @@ function realca(txt, termos) {
 /* `bs` deixa passar só as bobines de um local, para a vista agrupada poder
    mostrar o mesmo filamento em dois sítios com as contas certas de cada um. */
 function cartao(f, termos, bs) {
-  bs = bs || vivas(f);
+  const todas = vivas(f);
+  bs = bs || todas;
+  /* na vista por local o cartão mostra só as bobines desta estante -- estas são
+     as outras, para não parecer que o filamento é só isto */
+  const aqui = new Set(bs.map(b => b.id));
+  const fora = todas.filter(b => !aqui.has(b.id));
+  const locaisFora = [...new Set(fora.map(b => caminhoLocal(b.local_id) || 'sem local'))];
+  const alhures = fora.length
+    ? `<span class="alhures" title="${esc('também em ' + locaisFora.join(' · '))}">+${fora.length} ${
+        locaisFora.length > 2 ? `noutros ${locaisFora.length} locais` : `em ${locaisFora.join(' e ')}`}</span>`
+    : '';
   const total = bs.reduce((a, b) => a + (+b.peso_liquido_g || 0), 0);
   const rest = bs.reduce((a, b) => a + (b.estado === 'vazio' ? 0 : (+b.restante_g || 0)), 0);
   const pct = total > 0 ? Math.max(0, Math.min(100, rest / total * 100)) : 0;
   const locais = [...new Set(bs.map(b => caminhoLocal(b.local_id) || 'sem local'))];
-  const nome = [f.marca, f.material, f.cor].filter(Boolean).join(' ');
+  const nome = nomeFil(f);
   const peso = f.peso_g >= 1000 ? (f.peso_g / 1000) + ' kg' : f.peso_g + ' g';
   const abertas = bs.filter(b => b.estado === 'aberto').length;
   const vazio = bs.length === 0;
@@ -928,10 +944,12 @@ function cartao(f, termos, bs) {
         corBarra(pct / 100)}"></i></div>
       <div class="mt">${Math.round(rest)} g de ${Math.round(total)} g${
         pkg ? ` · <b>${eur(pkg)}/kg</b>` : ''}${abertas ? ` · ${abertas} aberta${abertas > 1 ? 's' : ''}` : ''}${
-        nCaixa ? ` · ${CAIXA_MINI} ${nCaixa === bs.length ? 'na caixa' : nCaixa + ' na caixa'}` : ''}</div>`}
+        nCaixa ? ` · ${CAIXA_MINI} ${nCaixa === bs.length ? 'na caixa' : nCaixa + ' na caixa'}` : ''}${
+        alhures ? ' · ' + alhures : ''}</div>`}
     </div>
     <div class="qty">${vazio ? '<span class="pill">sem stock</span>'
-      : `<b>${bs.length}</b><div class="sub">bobine${bs.length === 1 ? '' : 's'}</div>`}</div>
+      : `<b>${bs.length}</b><div class="sub">${fora.length
+          ? `de ${todas.length} bobines` : `bobine${bs.length === 1 ? '' : 's'}`}</div>`}</div>
   </div>`;
 }
 
@@ -1029,15 +1047,18 @@ function chaveMaterial(txt) {
   return norm(txt || '').replace(/\bplus\b/g, '+').replace(/[\s-]+/g, '');
 }
 
-/* Sub-ordenação dentro de cada grupo (e da lista seguida). */
+/* Sub-ordenação dentro de cada grupo (e da lista seguida). Compara pares
+   {f, bs} e não filamentos: na vista por local o mesmo filamento aparece em
+   cada estante onde tem bobines, e o que manda é o que está NAQUELA estante.
+   A ordenar pelo total do filamento, um com 3 bobines espalhadas ficava acima
+   de outro com mais ali -- e o cartão ao lado mostrava menos gramas. */
 const ORDENADORES = {
-  nome: [(a, b) => (a.marca + ' ' + a.material + ' ' + a.cor)
-    .localeCompare(b.marca + ' ' + b.material + ' ' + b.cor, 'pt'), 'nome (A-Z)'],
-  restante: [(a, b) => restante(b) - restante(a), 'mais filamento'],
-  bobines: [(a, b) => vivas(b).length - vivas(a).length, 'mais bobines'],
-  recente: [(a, b) => (b.criado_em || 0) - (a.criado_em || 0), 'adicionado há menos'],
-  barato: [(a, b) => (precoKg(vivas(a)) ?? 9e9) - (precoKg(vivas(b)) ?? 9e9), 'mais barato por kg'],
-  caro: [(a, b) => (precoKg(vivas(b)) ?? -1) - (precoKg(vivas(a)) ?? -1), 'mais caro por kg'],
+  nome: [(a, b) => nomeFil(a.f).localeCompare(nomeFil(b.f), 'pt'), 'nome (A-Z)'],
+  restante: [(a, b) => somaRestante(b.bs) - somaRestante(a.bs), 'mais filamento'],
+  bobines: [(a, b) => b.bs.length - a.bs.length, 'mais bobines'],
+  recente: [(a, b) => (b.f.criado_em || 0) - (a.f.criado_em || 0), 'adicionado há menos'],
+  barato: [(a, b) => (precoKg(a.bs) ?? 9e9) - (precoKg(b.bs) ?? 9e9), 'mais barato por kg'],
+  caro: [(a, b) => (precoKg(b.bs) ?? -1) - (precoKg(a.bs) ?? -1), 'mais caro por kg'],
 };
 const VISTAS = {
   seguido: 'tudo seguido', local: 'por local', marca: 'por marca',
@@ -1049,8 +1070,9 @@ const CHAVE_GRUPO = {
   cor: f => capitaliza(corCanonica(f.cor)) || 'Sem cor',
 };
 
-function ordenaFilamentos(fs) {
-  return fs.slice().sort(ORDENADORES[ORDEM] ? ORDENADORES[ORDEM][0] : ORDENADORES.nome[0]);
+const paresDe = fs => fs.map(f => ({f, bs: vivas(f)}));
+function ordenaPares(pares) {
+  return pares.slice().sort((ORDENADORES[ORDEM] || ORDENADORES.nome)[0]);
 }
 
 function cabecalhoGrupo(titulo, via, nb, cap, kg, pkg) {
@@ -1069,7 +1091,7 @@ function cabecalhoGrupo(titulo, via, nb, cap, kg, pkg) {
 function porLocal(fs, termos) {
   const grupos = new Map();
   const poe = (k, f, bs) => { if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push({f, bs}); };
-  for (const f of ordenaFilamentos(fs)) {
+  for (const f of fs) {
     const bs = vivas(f);
     if (!bs.length) { poe(-1, f, []); continue; }
     const por = new Map();
@@ -1087,7 +1109,7 @@ function porLocal(fs, termos) {
     return cmpLocal(a, b);
   });
   return chaves.map(k => {
-    const itens = grupos.get(k);
+    const itens = ordenaPares(grupos.get(k));
     const nb = itens.reduce((a, i) => a + i.bs.length, 0);
     const kg = itens.reduce((a, i) => a + i.bs.reduce(
       (x, b) => x + (b.estado === 'vazio' ? 0 : (+b.restante_g || 0)), 0), 0) / 1000;
@@ -1106,7 +1128,7 @@ function porLocal(fs, termos) {
 function porFaceta(fs, termos, faceta) {
   const chave = CHAVE_GRUPO[faceta];
   const grupos = new Map();
-  for (const f of ordenaFilamentos(fs)) {
+  for (const {f} of ordenaPares(paresDe(fs))) {
     const k = chave(f);
     if (!grupos.has(k)) grupos.set(k, []);
     grupos.get(k).push(f);
@@ -1144,7 +1166,7 @@ function desenhaLista() {
   $('#lista').className = agrupada ? '' : 'spools';
   $('#lista').innerHTML = VISTA === 'local' ? porLocal(fs, termos)
     : agrupada ? porFaceta(fs, termos, VISTA)
-    : ordenaFilamentos(fs).map(f => cartao(f, termos)).join('');
+    : ordenaPares(paresDe(fs)).map(({f, bs}) => cartao(f, termos, bs)).join('');
 
   const vazio = $('#vazio');
   vazio.hidden = fs.length > 0;
@@ -2119,7 +2141,7 @@ async function entrar(registar) {
 }
 
 async function arranca() {
-  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.11.1')]);
+  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.11.2')]);
   LEX = lex;
   if (!me.user) {
     $('#gate').hidden = false;

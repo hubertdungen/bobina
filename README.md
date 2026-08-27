@@ -68,6 +68,10 @@ adicionado há menos). A escolha fica guardada. No agrupamento por cor, "Jet
 Black", "Preto" e "Traffic Black" caem todos no mesmo grupo — agrupar pelo texto
 cru dava um grupo por bobine.
 
+Na vista **por local**, um filamento espalhado por duas estantes aparece nas
+duas, e cada cartão conta só o que está ali: é isso que a ordenação usa, e o
+cartão diz **de quantas bobines** faz parte e **onde estão as outras**.
+
 **Arrumação.** Locais em árvore (sala › armário › prateleira › caixa) com
 capacidade, e a lista desenha essa árvore: o que está dentro de outro aparece
 encaixado lá dentro. Nome, tipo, capacidade e "dentro de" mudam-se a qualquer
