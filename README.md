@@ -60,7 +60,9 @@ gastar primeiro —, e clicar outra vez tira todas. Para escolher outra, abre-se
 filamento e marca-se lá a bobine; o cartão acende à mesma, e só apaga quando
 nenhuma lá dentro estiver marcada. Podem estar várias ao mesmo tempo, para quem
 imprime a duas cores. Não é um estado da bobine: uma bobine montada continua
-*aberta*. Os três sinais — símbolo a verde, contorno verde e véu verde — ligam-se
+*aberta*. Na pesquisa há uma chip com o mesmo símbolo — **na impressora (n)** —
+que deixa na lista só o que está montado; aparece quando há alguma coisa
+montada, e desliga-se sozinha quando sai a última. Os três sinais — símbolo a verde, contorno verde e véu verde — ligam-se
 e desligam-se um a um em *Definições* (o véu vem desligado).
 
 **Aparência.** Em *Definições* dá para forçar o desenho ou a foto em todas as

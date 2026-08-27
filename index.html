@@ -90,6 +90,10 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:12p
   background:var(--panel2);color:var(--dim);cursor:pointer;user-select:none}
 .chip:hover{border-color:var(--accent);color:var(--txt)}
 .chip.on{background:var(--accent);color:#160b33;border-color:var(--accent)}
+.chip.comicone{gap:5px;padding-left:7px}
+/* ligada fica verde como o resto do "na impressora" -- a menos que o símbolo a
+   verde esteja desligado nas Definições, e aí segue o roxo das outras chips */
+.chip.nozchip.on:not(.roxo){background:var(--good);border-color:var(--good);color:#062418}
 /* Interruptor: o próprio botão é a marca. Ligado toma o roxo da app — o mesmo
    das chips e do resto da identidade — e desligado fica neutro. Sem a caixinha
    do sistema, que destoava de tudo. */
@@ -676,7 +680,7 @@ const CAIXA_MINI = `<svg viewBox="0 0 48 48" width="13" height="13" style="verti
 /* o bico da impressora: o fio a entrar, o bloco de aquecimento, o cone e a gota.
    Tudo em currentColor -- o cinzento/verde vem da classe, não do desenho. */
 const NOZZLE = `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"
-  style="display:block">
+  style="vertical-align:-3px">
   <path d="M12 2v3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
   <rect x="6" y="5.5" width="12" height="6.5" rx="1.4" fill="currentColor"/>
   <path d="M8.6 12h6.8l-2.2 5.2h-2.4z" fill="currentColor"/>
@@ -1036,6 +1040,11 @@ let VER = {
 let VISTA = PREF.ler('vista', 'seguido');   // seguido | local | marca | material | cor
 let ORDEM = PREF.ler('ordem', 'nome');      // sub-ordenação dentro de cada grupo
 let VER_SEM_STOCK = PREF.ler('semstock', false);
+/* "o que está montado" é uma pergunta do momento, não uma preferência: não se
+   guarda, senão abria-se a app amanhã com a lista filtrada sem se perceber
+   porquê. */
+let SO_IMPRESSORA = false;
+const montadas = f => vivas(f).filter(b => +b.na_impressora).length;
 
 /* A cor canónica de um filamento: "Jet Black", "Preto" e "Traffic Black" caem
    todos em "preto". É o que torna o agrupamento por cor útil -- agrupar pelo
@@ -1223,7 +1232,11 @@ function desenhaLista() {
      guardado (pelo histórico de preços e para se voltar a comprar) mas sai da
      lista, senão continuava lá especado a fingir que se tem. */
   const escondidos = todos.filter(f => vivas(f).length === 0).length;
-  const fs = VER_SEM_STOCK ? todos : todos.filter(f => vivas(f).length > 0);
+  /* se a última bobine saiu da impressora, o filtro sai com ela -- senão ficava
+     ligado a mostrar uma lista vazia e sem chip por onde o desligar */
+  if (!INV.filamentos.some(montadas)) SO_IMPRESSORA = false;
+  const fs = (VER_SEM_STOCK ? todos : todos.filter(f => vivas(f).length > 0))
+    .filter(f => !SO_IMPRESSORA || montadas(f));
 
   $('#qCnt').textContent = q ? String(fs.length) : '';
   $('#qClr').hidden = !q;
@@ -1239,7 +1252,10 @@ function desenhaLista() {
     const escape = escondidos && !VER_SEM_STOCK
       ? `<br><span class="sub">${escondidos} sem stock — vê o botão <b>sem stock</b> aqui em cima.</span>` : '';
     vazio.innerHTML = INV.filamentos.length
-      ? (q ? `Nada com <b>${esc(q)}</b>.<br><span class="sub">Experimenta menos palavras — "asa preto" chega.</span>${escape}`
+      ? (SO_IMPRESSORA
+           ? `Nada montado${q ? ` que case com <b>${esc(q)}</b>` : ''}.<br><span class="sub">${
+               NOZZLE} marca-se no cartão de cada filamento.</span>`
+         : q ? `Nada com <b>${esc(q)}</b>.<br><span class="sub">Experimenta menos palavras — "asa preto" chega.</span>${escape}`
            : `Sem bobines em casa.${escape}`)
       : `Ainda não tens nada.<br><span class="sub">Vai a <b>Adicionar</b> e procura numa loja.</span>`;
   }
@@ -1250,9 +1266,14 @@ const CHIPS = ['PLA', 'PETG', 'ASA', 'ABS', 'TPU', 'Nylon', 'preto', 'branco', '
 function desenhaChips() {
   const termos = termosDe($('#q').value);
   const sem = INV.filamentos.filter(f => vivas(f).length === 0).length;
+  const nImp = INV.filamentos.reduce((a, f) => a + montadas(f), 0);
   $('#qChips').innerHTML = CHIPS.map(c =>
       `<span class="chip${termos.includes(norm(c)) ? ' on' : ''}" data-chip="${esc(c)}">${esc(c)}</span>`).join('')
     + (sem ? `<span class="chip${VER_SEM_STOCK ? ' on' : ''}" data-semstock="1">sem stock (${sem})</span>` : '')
+    + (nImp ? `<span class="chip comicone nozchip${SO_IMPRESSORA ? ' on' : ''}${
+        VER.impIcone ? '' : ' roxo'}" data-soimp="1"
+        title="ver só as bobines que estão montadas na impressora">${
+        NOZZLE} na impressora (${nImp})</span>` : '')
     + `<span class="vista">
         <span class="lab">agrupar</span>
         <select id="qVista" title="como agrupar a lista">${Object.entries(VISTAS).map(([k, t]) =>
@@ -2221,7 +2242,7 @@ async function entrar(registar) {
 }
 
 async function arranca() {
-  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.14.0')]);
+  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.15.0')]);
   LEX = lex;
   if (!me.user) {
     $('#gate').hidden = false;
@@ -2248,6 +2269,9 @@ $('#qChips').addEventListener('click', e => {
   const ss = e.target.closest('[data-semstock]');
   if (ss) { VER_SEM_STOCK = !VER_SEM_STOCK; PREF.poe('semstock', VER_SEM_STOCK);
             desenhaLista(); desenhaChips(); return; }
+  if (e.target.closest('[data-soimp]')) {
+    SO_IMPRESSORA = !SO_IMPRESSORA; desenhaLista(); desenhaChips(); return;
+  }
   const c = e.target.closest('[data-chip]'); if (!c) return;
   const termo = c.dataset.chip, actuais = termosDe($('#q').value);
   const jaLa = actuais.includes(norm(termo));
