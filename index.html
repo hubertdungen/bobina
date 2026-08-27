@@ -52,6 +52,9 @@ h1{font-size:24px;margin:0;letter-spacing:-.6px;font-weight:800}
 h2{font-size:16px;margin:0 0 12px;font-weight:700}
 h3{font-size:13px;margin:0 0 8px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.4px}
 .sub{color:var(--dim);font-size:12.5px}
+/* a percentagem vive na etiqueta do "Restante": herda os 11,5 px dela (o .sub
+   era maior do que a própria etiqueta) e fica só um pouco mais clara */
+.pctlbl{color:var(--txt);margin-left:3px}
 header.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:10px}
 .brand svg{width:36px;height:36px;flex:none}
@@ -1311,7 +1314,7 @@ async function abreFilamento(fid) {
           ${['selado','aberto','vazio','arquivado'].map(e => `<option${e === b.estado ? ' selected' : ''}>${e}</option>`).join('')}</select></div>
         <div class="field"><label>Bobine cheia (g)</label>
           <input type="number" min="0" step="10" data-k="peso_liquido_g" value="${b.peso_liquido_g ?? ''}"></div>
-        <div class="field"><label>Restante (g) <span class="sub" data-pct></span></label>
+        <div class="field"><label>Restante (g) <span class="pctlbl" data-pct></span></label>
           <input type="number" min="0" step="10" data-k="restante_g" value="${b.restante_g ?? ''}"></div>
       </div>
       <div class="row" style="margin-top:8px;gap:5px">
