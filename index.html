@@ -348,9 +348,13 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
       <div class="field"><label>Onde fica</label><select id="mLocal"></select></div>
       <div class="field"><label>Estado</label><select id="mEstado">
         <option value="selado">selado</option><option value="aberto">aberto</option></select></div>
-      <div class="field"><label>Embalagem</label>
-        <label class="tog" id="mCaixaChip" style="align-self:flex-start">
-          <input type="checkbox" id="mCaixa"><span class="cxglifo"></span>tem caixa</label></div>
+      <div class="field"><label>Como fica</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <label class="tog" id="mCaixaChip">
+            <input type="checkbox" id="mCaixa"><span class="cxglifo"></span>tem caixa</label>
+          <label class="tog" id="mImpChip">
+            <input type="checkbox" id="mImp"><span class="nozglifo"></span>na impressora</label>
+        </div></div>
     </div>
     <div class="field" style="margin-top:12px"><label>Bobine — cor</label>
       <div class="previa" id="mPrev"></div>
@@ -1757,9 +1761,13 @@ async function adicionaDeLoja(p) {
         <input id="xRest" type="number" min="0" step="10" value="${p.peso_g || 1000}"></div>
       <div class="field"><label>Onde fica</label><select id="xLocal">${
         opcoesLocal(+PREFS.local || null, {vazio: '— sem local —'})}</select></div>
-      <div class="field"><label>Embalagem</label>
-        <label class="tog${PREFS.caixa ? ' on' : ''}" id="xCaixaChip" style="align-self:flex-start">
-          <input type="checkbox" id="xCaixa"${PREFS.caixa ? ' checked' : ''}>${CAIXA_MINI} vem na caixa</label></div>
+      <div class="field"><label>Como fica</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <label class="tog${PREFS.caixa ? ' on' : ''}" id="xCaixaChip">
+            <input type="checkbox" id="xCaixa"${PREFS.caixa ? ' checked' : ''}>${CAIXA_MINI} vem na caixa</label>
+          <label class="tog" id="xImpChip">
+            <input type="checkbox" id="xImp">${NOZZLE} na impressora</label>
+        </div></div>
     </div>
     <div class="field" style="margin-top:12px"><label>Bobine — cor e imagem</label>
       <div class="previa" id="xPrev"></div>
@@ -1795,6 +1803,8 @@ async function adicionaDeLoja(p) {
   const leHex = ligaPicker(dlg, 'add', v => { hexEscolhido = v; desenha(); });
   dlg.querySelector('#xCaixa').onchange = e =>
     dlg.querySelector('#xCaixaChip').classList.toggle('on', e.target.checked);
+  dlg.querySelector('#xImp').onchange = e =>
+    dlg.querySelector('#xImpChip').classList.toggle('on', e.target.checked);
   const togIc = dlg.querySelector('#xIcone');
   if (togIc) togIc.onchange = () => {
     dlg.querySelector('#xIconeTog').classList.toggle('on', togIc.checked); desenha();
@@ -1868,7 +1878,15 @@ async function adicionaDeLoja(p) {
   const peso = dlg.querySelector('#xPeso');
   let restSegue = true;
   const cheio = () => { rest.max = +peso.value || ''; if (+rest.value > +peso.value) rest.value = peso.value; };
-  const soUma = () => { dlg.querySelector('#xRestWrap').hidden = +qtd.value !== 1; };
+  const soUma = () => {
+    const uma = +qtd.value === 1;
+    dlg.querySelector('#xRestWrap').hidden = !uma;
+    /* montar TRÊS bobines de uma vez é mentira: a três, o interruptor sai da
+       frente e não se grava -- a mesma regra do "restante" aqui ao lado */
+    const ci = dlg.querySelector('#xImpChip');
+    ci.hidden = !uma;
+    if (!uma) { dlg.querySelector('#xImp').checked = false; ci.classList.remove('on'); }
+  };
   qtd.oninput = soUma;
   peso.addEventListener('input', () => {
     if (restSegue) rest.value = peso.value;
@@ -1890,6 +1908,7 @@ async function adicionaDeLoja(p) {
                     icone: (dlg.querySelector('#xIcone') || {}).checked ? 1 : 0},
         bobine: {local_id: +v('#xLocal') || null, preco: +v('#xPreco') || 0,
                  caixa: dlg.querySelector('#xCaixa').checked ? 1 : 0,
+                 na_impressora: dlg.querySelector('#xImp').checked ? 1 : 0,
                  estado: PREFS.estado,
                  // só faz sentido com uma bobine: a várias, não se sabe qual é qual
                  ...(+v('#xQtd') === 1 ? {restante_g: +v('#xRest') || 0} : {}),
@@ -2190,13 +2209,20 @@ function montaPickerManual() {
   };
   mHex = ligaPicker(document, 'man', v => { escolhido = v; desenha(); });
   $('#mCaixaChip').querySelector('.cxglifo').innerHTML = CAIXA_MINI;
+  $('#mImpChip').querySelector('.nozglifo').innerHTML = NOZZLE;
+  $('#mImp').onchange = e => $('#mImpChip').classList.toggle('on', e.target.checked);
   $('#mData').value = new Date().toISOString().slice(0, 10);
   $('#mCaixa').checked = !!PREFS.caixa;
   $('#mCaixaChip').classList.toggle('on', !!PREFS.caixa);
   $('#mEstado').value = PREFS.estado || 'selado';
   $('#mCaixa').onchange = e => $('#mCaixaChip').classList.toggle('on', e.target.checked);
   /* mesma ideia do diálogo da loja: com uma só bobine diz-se já quanto resta */
-  const soUmaM = () => { $('#mRestWrap').hidden = +$('#mQtd').value !== 1; };
+  const soUmaM = () => {
+    const uma = +$('#mQtd').value === 1;
+    $('#mRestWrap').hidden = !uma;
+    $('#mImpChip').hidden = !uma;
+    if (!uma) { $('#mImp').checked = false; $('#mImpChip').classList.remove('on'); }
+  };
   const cheioM = () => { const pz = +$('#mPeso').value || 0;
     $('#mRest').max = pz || ''; if (+$('#mRest').value > pz) $('#mRest').value = pz; };
   $('#mQtd').oninput = soUmaM;
@@ -2242,7 +2268,7 @@ async function entrar(registar) {
 }
 
 async function arranca() {
-  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.15.0')]);
+  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.15.1')]);
   LEX = lex;
   if (!me.user) {
     $('#gate').hidden = false;
@@ -2332,12 +2358,14 @@ $('#mAdd').onclick = async () => {
                   seguir: PREFS.seguir ? 1 : 0},
       bobine: {local_id: +v('#mLocal') || null, preco: +v('#mPreco') || 0, estado: v('#mEstado'),
                caixa: $('#mCaixa').checked ? 1 : 0,
+               na_impressora: $('#mImp').checked ? 1 : 0,
                ...(+v('#mQtd') === 1 ? {restante_g: +v('#mRest') || 0} : {}),
                comprado_loja: mLojaLe(),
                comprado_em: v('#mData') || new Date().toISOString().slice(0, 10)},
       quantidade: +v('#mQtd') || 1,
     })});
     ['#mMarca', '#mMat', '#mCor', '#mPreco'].forEach(i => $(i).value = '');
+    $('#mImp').checked = false; $('#mImpChip').classList.remove('on');
     $('#mRest').value = $('#mPeso').value;
     $('#mRest').dataset.seguePeso = '1';
     await carrega();
