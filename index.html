@@ -1071,11 +1071,15 @@ const ORDENADORES = {
 };
 const VISTAS = {
   seguido: 'tudo seguido', local: 'por local', marca: 'por marca',
-  material: 'por material', cor: 'por cor',
+  material: 'por material', submaterial: 'por sub-material', cor: 'por cor',
 };
 const CHAVE_GRUPO = {
   marca: f => (f.marca || '').trim() || 'Sem marca',
-  material: f => (f.material || '').trim().toUpperCase() || 'Sem material',
+  /* dois níveis: "por material" junta tudo o que é PLA -- PLA+, PLA Silk,
+     PLA Wood, HT-PLA -- e é a mesma leitura da etiqueta do cartão; o
+     sub-material é o que está escrito no filamento, sem interpretação */
+  material: f => (f.material || '').trim() ? materialBase(f) : 'Sem material',
+  submaterial: f => (f.material || '').trim().toUpperCase() || 'Sem material',
   cor: f => capitaliza(corCanonica(f.cor)) || 'Sem cor',
 };
 
@@ -2150,7 +2154,7 @@ async function entrar(registar) {
 }
 
 async function arranca() {
-  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.11.3')]);
+  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.12.0')]);
   LEX = lex;
   if (!me.user) {
     $('#gate').hidden = false;

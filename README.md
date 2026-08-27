@@ -63,8 +63,11 @@ para dar o sinal sem pintar o cartão. Basta abrir uma bobine para o grupo deixa
 de estar marcado.
 
 **Vistas.** A lista mostra-se seguida ou agrupada por **local**, **marca**,
-**material** ou **cor**, com sub-ordenação (nome, mais filamento, mais bobines,
-adicionado há menos). A escolha fica guardada. No agrupamento por cor, "Jet
+**material**, **sub-material** ou **cor**, com sub-ordenação (nome, mais
+filamento, mais bobines, adicionado há menos). A escolha fica guardada. O
+material tem dois níveis: *por material* junta tudo o que é PLA — PLA+, PLA
+Silk, PLA Wood, HT-PLA — e é a mesma leitura da etiqueta do cartão, enquanto
+*por sub-material* separa o que está escrito em cada filamento. No agrupamento por cor, "Jet
 Black", "Preto" e "Traffic Black" caem todos no mesmo grupo — agrupar pelo texto
 cru dava um grupo por bobine.
 
