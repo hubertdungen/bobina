@@ -173,9 +173,11 @@ input[type=color]{width:44px;height:32px;min-height:32px;padding:2px;cursor:poin
 /* o bico vive debaixo da contagem: cinzento quer dizer que não há nada montado,
    e a cor que há. Verde e não roxo de propósito -- o roxo já quer dizer "por
    abrir" nesta lista, e duas coisas com a mesma cor não se distinguem. */
-.noz{display:inline-flex;margin-top:3px;padding:2px;line-height:0;cursor:pointer;
-  border:1px solid transparent;border-radius:7px;background:none;color:var(--dim);
-  opacity:.5;transition:.15s}
+/* min-height:0 -- a regra geral dos botões impõe 38 px, que aqui era o dobro do
+   desenho e esticava o cartão todo */
+.noz{display:inline-flex;min-height:0;margin-top:3px;padding:3px;line-height:0;
+  cursor:pointer;border:1px solid transparent;border-radius:7px;background:none;
+  color:var(--dim);opacity:.5;transition:.15s}
 .noz:hover{opacity:1;color:var(--txt);border-color:var(--line)}
 .noz.on{opacity:1;color:var(--good);border-color:rgba(62,207,142,.42);
   background:rgba(62,207,142,.1)}
@@ -2210,7 +2212,7 @@ async function entrar(registar) {
 }
 
 async function arranca() {
-  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.13.1')]);
+  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.13.2')]);
   LEX = lex;
   if (!me.user) {
     $('#gate').hidden = false;
