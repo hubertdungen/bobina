@@ -54,11 +54,13 @@ comparação é por significado e não por letras, por isso a mesma bobine compr
 como "Black" numa loja e "Preto" noutra fica no mesmo sítio.
 
 **Aparência.** Em *Definições* dá para forçar o desenho ou a foto em todas as
-bobines, ligar/desligar a etiqueta do material e ligar/desligar o **véu dos por
-abrir** — muda só o que se vê, nunca o que está gravado. Um grupo em que *todas*
-as bobines ainda estão seladas leva um véu roxo e um reflexo que o atravessa
-devagar (muito mais pausa do que passagem, e nenhum se o sistema pedir menos
-animação): basta abrir uma para o grupo deixar de estar marcado.
+bobines, ligar/desligar a etiqueta do material e marcar os **por abrir** — muda
+só o que se vê, nunca o que está gravado. Um grupo em que *todas* as bobines
+ainda estão seladas pode levar duas coisas, ligadas em separado: um **véu roxo**,
+que se nota sempre, e um **reflexo** que o atravessa devagar (muito mais pausa do
+que passagem, e nenhum se o sistema pedir menos animação). Só o reflexo já chega
+para dar o sinal sem pintar o cartão. Basta abrir uma bobine para o grupo deixar
+de estar marcado.
 
 **Vistas.** A lista mostra-se seguida ou agrupada por **local**, **marca**,
 **material** ou **cor**, com sub-ordenação (nome, mais filamento, mais bobines,

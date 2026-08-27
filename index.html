@@ -125,18 +125,21 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:12p
    reflexo que atravessa devagar, com muito mais pausa do que passagem -- de
    relance vê-se o que ainda está selado sem a lista ficar a piscar. É só
    aparência: desliga-se nas Definições e não muda nada do inventário. */
-.spool.selado{position:relative;overflow:hidden;border-color:rgba(167,139,250,.42)}
-.spool.selado:hover{border-color:var(--accent)}
-.spool.selado::before{content:"";position:absolute;inset:0;pointer-events:none;
+.spool.porabrir{position:relative;overflow:hidden}
+/* o veu tinge o cartao todo e nota-se sempre; o reflexo so passa de vez em
+   quando. Ligam-se em separado porque nem toda a gente quer os dois. */
+.spool.veu{border-color:rgba(167,139,250,.42)}
+.spool.veu:hover{border-color:var(--accent)}
+.spool.veu::before{content:"";position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(135deg,rgba(167,139,250,.13),rgba(167,139,250,.03) 62%)}
-.spool.selado::after{content:"";position:absolute;top:-60%;bottom:-60%;width:34%;left:-55%;
+.spool.reflexo::after{content:"";position:absolute;top:-60%;bottom:-60%;width:34%;left:-55%;
   pointer-events:none;transform:skewX(-18deg);
   background:linear-gradient(90deg,transparent,rgba(240,171,252,.15),transparent);
   animation:reflexoSelado 9s ease-in-out infinite}
 /* 0 -> 30% e a passagem (2,7 s); o resto do ciclo fica parado fora do cartao */
 @keyframes reflexoSelado{0%{left:-55%}30%{left:135%}100%{left:135%}}
 /* quem pediu ao sistema para nao haver animacoes fica so com o veu */
-@media (prefers-reduced-motion: reduce){ .spool.selado::after{animation:none;left:135%} }
+@media (prefers-reduced-motion: reduce){ .spool.reflexo::after{animation:none;left:135%} }
 .swatch{width:42px;height:42px;border-radius:11px;flex:none;border:1px solid rgba(255,255,255,.16);
   position:relative;overflow:hidden}
 .swatch::after{content:"";position:absolute;inset:32% 32%;border-radius:50%;
@@ -392,8 +395,10 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
         <label class="tog" id="verEtiquetaTog" style="align-self:flex-start">
           <input type="checkbox" id="verEtiqueta"> mostrar PLA · PETG · ASA</label></div>
       <div class="field"><label>Bobines por abrir</label>
-        <label class="tog" id="verSeladoTog" style="align-self:flex-start">
-          <input type="checkbox" id="verSelado"> véu roxo em quem está tudo selado</label></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <label class="tog" id="verVeuTog"><input type="checkbox" id="verVeu"> véu roxo</label>
+          <label class="tog" id="verReflexoTog"><input type="checkbox" id="verReflexo"> reflexo</label>
+        </div></div>
     </div>
   </div>
   <div class="card" style="margin-bottom:12px">
@@ -907,8 +912,9 @@ function cartao(f, termos, bs) {
   const nCaixa = bs.filter(temCaixa).length;
   const lojas = [...new Set(bs.map(b => nomeLoja(b.comprado_loja)).filter(Boolean))];
   const pkg = precoKg(bs);
-  return `<div class="spool${vazio ? ' semstock' : ''}${
-      porAbrir && VER.selado ? ' selado' : ''}" data-fil="${f.id}">
+  const realce = porAbrir && (VER.veu || VER.reflexo)
+    ? ' porabrir' + (VER.veu ? ' veu' : '') + (VER.reflexo ? ' reflexo' : '') : '';
+  return `<div class="spool${vazio ? ' semstock' : ''}${realce}" data-fil="${f.id}">
     <div class="mediacol" style="width:44px">${media(f, 44, bs)}${
       VER.etiqueta && materialBase(f)
         ? `<span class="matbadge" style="color:${esc(tinta(f))};background:${
@@ -944,7 +950,9 @@ const PREF = {
 let VER = {
   imagem: PREF.ler('ver.imagem', 'auto'),     // auto | desenho | foto
   etiqueta: PREF.ler('ver.etiqueta', true),   // etiqueta do material no cartão
-  selado: PREF.ler('ver.selado', true),       // véu roxo em quem tem tudo por abrir
+  /* eram uma so ('ver.selado'); quem ja a tinha desligada continua sem nada */
+  veu: PREF.ler('ver.veu', PREF.ler('ver.selado', true)),
+  reflexo: PREF.ler('ver.reflexo', PREF.ler('ver.selado', true)),
 };
 let VISTA = PREF.ler('vista', 'seguido');   // seguido | local | marca | material | cor
 let ORDEM = PREF.ler('ordem', 'nome');      // sub-ordenação dentro de cada grupo
@@ -1983,20 +1991,19 @@ async function desenhaDef() {
   $('#verImagem').onchange = e => {
     VER.imagem = e.target.value; PREF.poe('ver.imagem', VER.imagem); desenhaLista();
   };
-  const et = $('#verEtiqueta');
-  et.checked = !!VER.etiqueta;
-  $('#verEtiquetaTog').classList.toggle('on', !!VER.etiqueta);
-  et.onchange = () => {
-    VER.etiqueta = et.checked; PREF.poe('ver.etiqueta', VER.etiqueta);
-    $('#verEtiquetaTog').classList.toggle('on', et.checked); desenhaLista();
+  /* os interruptores de aparencia sao todos iguais: guardar, marcar, redesenhar */
+  const ligaVer = (id, chave) => {
+    const c = $('#' + id), tog = $('#' + id + 'Tog');
+    c.checked = !!VER[chave];
+    tog.classList.toggle('on', !!VER[chave]);
+    c.onchange = () => {
+      VER[chave] = c.checked; PREF.poe('ver.' + chave, VER[chave]);
+      tog.classList.toggle('on', c.checked); desenhaLista();
+    };
   };
-  const sel = $('#verSelado');
-  sel.checked = !!VER.selado;
-  $('#verSeladoTog').classList.toggle('on', !!VER.selado);
-  sel.onchange = () => {
-    VER.selado = sel.checked; PREF.poe('ver.selado', VER.selado);
-    $('#verSeladoTog').classList.toggle('on', sel.checked); desenhaLista();
-  };
+  ligaVer('verEtiqueta', 'etiqueta');
+  ligaVer('verVeu', 'veu');
+  ligaVer('verReflexo', 'reflexo');
   DEF = await api('/api/definicoes');
   if (DEF.preferencias) PREFS = {...PREFS, ...DEF.preferencias};
   /* O formulário manual é montado no arranque, antes de as preferências
@@ -2112,7 +2119,7 @@ async function entrar(registar) {
 }
 
 async function arranca() {
-  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.11.0')]);
+  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.11.1')]);
   LEX = lex;
   if (!me.user) {
     $('#gate').hidden = false;
