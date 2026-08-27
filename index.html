@@ -125,6 +125,11 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:12p
 .swatch::after{content:"";position:absolute;inset:32% 32%;border-radius:50%;
   background:var(--panel);border:1px solid rgba(0,0,0,.35)}
 .bob{flex:none;display:block}
+/* coluna do ícone: a bobine (ou a foto) e, por baixo, a etiqueta do material */
+.mediacol{display:flex;flex-direction:column;align-items:center;gap:5px;flex:none}
+.matbadge{font-size:9.5px;font-weight:800;letter-spacing:.6px;line-height:1;
+  padding:3px 0;border-radius:6px;width:100%;text-align:center;
+  border:1px solid currentColor;background:rgba(255,255,255,.05)}
 .foto{flex:none;object-fit:contain;border-radius:10px;background:#fff}
 /* selector de cor: botões de amostra + roda RGB + voltar ao automático */
 .paleta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}
@@ -355,6 +360,21 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
       quilo, calculado pelo que pagaste. Não é preciso configurar nada: as duas apps correm nesta
       máquina e falam por um ficheiro de segredo partilhado.</div>
     <div id="ponte" style="margin-top:10px"></div>
+  </div>
+  <div class="card" style="margin-bottom:12px">
+    <h2>Aparência</h2>
+    <div class="sub" style="margin-bottom:10px">Muda só o que vês, neste aparelho.
+      Não altera nem apaga nada do que está gravado — é sempre reversível.</div>
+    <div class="grid c2" style="gap:10px">
+      <div class="field"><label>Imagem das bobines</label><select id="verImagem">
+        <option value="auto">como está gravado em cada uma</option>
+        <option value="desenho">sempre a bobine desenhada</option>
+        <option value="foto">sempre a foto da loja, quando existe</option>
+      </select></div>
+      <div class="field"><label>Etiqueta do material</label>
+        <label class="tog" id="verEtiquetaTog" style="align-self:flex-start">
+          <input type="checkbox" id="verEtiqueta"> mostrar PLA · PETG · ASA</label></div>
+    </div>
   </div>
   <div class="card" style="margin-bottom:12px">
     <h2>Ao adicionar</h2>
@@ -596,6 +616,20 @@ const CAIXA_MINI = `<svg viewBox="0 0 48 48" width="13" height="13" style="verti
   <rect x="5" y="9" width="38" height="9" rx="2"/></svg>`;
 
 const corDoFil = f => f.cor_hex || corDe(f.cor) || NEUTRA;
+/* O material SEM o subtipo: "PETG Pro" e "PETG Matte" são ambos PETG, "PLA+" é
+   PLA. É o canónico do léxico -- o mesmo que faz a pesquisa por "pla" achar os
+   PLA+ -- e é o que se quer numa etiqueta de relance. */
+function materialBase(f) {
+  const c = escolheFaceta(achaFacetas(f.material || '').material);
+  if (c) return c.toUpperCase();
+  /* "HT-PLA" não está no léxico inteiro, e ficar-se pelo primeiro pedaço dava
+     "HT". Parte-se pelos hífenes e fica o pedaço que é mesmo um material. */
+  for (const parte of norm(f.material || '').split(/[\s-]+/)) {
+    const h = (LEX.index[parte] || []).find(x => x.g === 'material');
+    if (h) return h.c.toUpperCase();
+  }
+  return (f.material || '').split(/[\s-]/)[0].toUpperCase();
+}
 /* A foto vem da NOSSA cache (/api/imagem), não da loja: assim continua a haver
    foto no dia em que a loja mexer nos ficheiros. Se mesmo assim falhar, o
    cartão troca sozinho para a bobine desenhada em vez de ficar com o ícone
@@ -606,7 +640,10 @@ function media(f, tam, bs) {
   const desenho = est === 'nenhuma'
     ? bobinaSVG(corDoFil(f), tam, eTransparente(f.cor))
     : caixaSVG(corDoFil(f), tam, eTransparente(f.cor), est === 'algumas');
-  if (!f.icone && f.imagem) {
+  // a escolha de aparência manda sobre o que está gravado, sem lhe mexer
+  if (VER.imagem === 'desenho') return desenho;
+  const preferirFoto = VER.imagem === 'foto' ? true : !f.icone;
+  if (preferirFoto && f.imagem) {
     const alt = desenho.replace(/"/g, '&quot;');
     return `<img class="foto" src="${esc(fotoURL(f.imagem))}" width="${tam}" height="${tam}"
       loading="lazy" alt="" data-alt="${alt}" onerror="this.outerHTML=this.dataset.alt">`;
@@ -804,7 +841,10 @@ function cartao(f, termos, bs) {
   const lojas = [...new Set(bs.map(b => nomeLoja(b.comprado_loja)).filter(Boolean))];
   const pkg = precoKg(bs);
   return `<div class="spool${vazio ? ' semstock' : ''}" data-fil="${f.id}">
-    ${media(f, 44, bs)}
+    <div class="mediacol" style="width:44px">${media(f, 44, bs)}${
+      VER.etiqueta && materialBase(f)
+        ? `<span class="matbadge" style="color:${esc(visivel(corDoFil(f)))}">${esc(materialBase(f))}</span>`
+        : ''}</div>
     <div style="min-width:0;flex:1">
       <div class="nm">${realca(nome || 'sem nome', termos)}</div>
       <div class="mt">${esc(peso)}${vazio ? '' : ' · ' + realca(locais.join(' · '), termos)}${
@@ -828,6 +868,12 @@ const PREF = {
     catch (e) { return omissao; }
   },
   poe(k, v) { try { localStorage.setItem('bobina.' + k, JSON.stringify(v)); } catch (e) {} },
+};
+/* Aparência: muda só o que se VÊ, nunca o que está gravado. Fica no browser
+   porque é escolha de quem está a olhar, não do inventário. */
+let VER = {
+  imagem: PREF.ler('ver.imagem', 'auto'),     // auto | desenho | foto
+  etiqueta: PREF.ler('ver.etiqueta', true),   // etiqueta do material no cartão
 };
 let VISTA = PREF.ler('vista', 'seguido');   // seguido | local | marca | material | cor
 let ORDEM = PREF.ler('ordem', 'nome');      // sub-ordenação dentro de cada grupo
@@ -1051,6 +1097,21 @@ async function abreFilamento(fid) {
         <div class="field"><label>Quando comprei</label>
           <input type="date" data-k="comprado_em" value="${esc(b.comprado_em || '')}"></div>
       </div></div>`).join('') || '<div class="sub">Sem bobines — já não tens nenhuma deste filamento.</div>'}</div>
+    ${INV.filamentos.length > 1 ? `<div class="row" style="margin-top:14px">
+      <span class="sub">Juntar a</span>
+      <select id="dJuntarSel" style="flex:1;min-width:170px">
+        <option value="">— outro filamento —</option>
+        ${INV.filamentos.filter(x => x.id !== fid)
+          .map(x => ({x, igual: chaveFil(x) === chaveFil(f)}))
+          .sort((a, b) => (b.igual - a.igual)
+            || (a.x.marca + a.x.material + a.x.cor).localeCompare(b.x.marca + b.x.material + b.x.cor, 'pt'))
+          .map(({x, igual}) => `<option value="${x.id}">${
+            esc([x.marca, x.material, x.cor].filter(Boolean).join(' '))}${
+            x.peso_g ? ' · ' + (x.peso_g >= 1000 ? x.peso_g / 1000 + ' kg' : x.peso_g + ' g') : ''}${
+            igual ? '  ·  parecido' : ''}</option>`).join('')}
+      </select>
+      <button id="dJuntar">juntar</button>
+    </div>` : ''}
     <div class="row" style="margin-top:14px">
       <button class="primary" id="dSalvar">Guardar</button>
       <button id="dPrecos">Ver preços agora</button>
@@ -1108,6 +1169,9 @@ async function abreFilamento(fid) {
      bobine são 125 g e o máximo são 250. Os atalhos e a percentagem saem do
      campo do peso, por isso corrigir o peso corrige tudo o resto na hora. */
   dlg.querySelectorAll('[data-b]').forEach(c => {
+   try {
+    // a bobine desta linha; o `b` do template ficou lá atrás e aqui não existe
+    const b = bs.find(x => x.id === +c.dataset.b) || {};
     const campoPeso = c.querySelector('[data-k="peso_liquido_g"]');
     const rest = c.querySelector('[data-k="restante_g"]');
     const pct = c.querySelector('[data-pct]');
@@ -1167,9 +1231,31 @@ async function abreFilamento(fid) {
       refresca();
     };
     refresca();
+   } catch (e) {
+    /* Uma linha que rebente não pode levar o resto à frente: foi assim que um
+       ReferenceError numa bobine deixou o Guardar, o Fechar e o Apagar todos
+       por ligar -- só os campos nativos respondiam e era preciso recarregar. */
+    console.error('bobine', c.dataset.b, e);
+   }
   });
   const fecha = () => { dlg.close(); dlg.remove(); };
   dlg.querySelector('#dFechar').onclick = fecha;
+  const btJuntar = dlg.querySelector('#dJuntar');
+  if (btJuntar) btJuntar.onclick = async () => {
+    const destino = +dlg.querySelector('#dJuntarSel').value || 0;
+    if (!destino) return toast('escolhe primeiro a que queres juntar');
+    const alvo = FIL[destino];
+    const nome = [alvo.marca, alvo.material, alvo.cor].filter(Boolean).join(' ');
+    if (!confirm(`Juntar as ${bs.length} bobine(s) deste filamento a "${nome}"?\n\n`
+      + 'Cada bobine leva o seu peso e o seu preço, por isso o €/kg de cada uma não muda.')) return;
+    try {
+      const r = await api('/api/filamentos/' + fid + '/juntar',
+                          {method: 'POST', body: JSON.stringify({destino_id: destino})});
+      if (r.erro) return toast(r.erro);
+      fecha(); await carrega();
+      toast(`${r.bobines_movidas} bobine(s) passaram para "${nome}"`, 4000);
+    } catch (e) { toast(e.message, 5000); }
+  };
   dlg.querySelector('#dApagaFil').onclick = async () => {
     const nome = [f.marca, f.material, f.cor].filter(Boolean).join(' ');
     if (!confirm(`Apagar "${nome}" de vez?\n\nLeva as ${bs.length} bobine(s) e o histórico de preços.`)) return;
@@ -1204,7 +1290,7 @@ async function abreFilamento(fid) {
       c.querySelectorAll('[data-k]').forEach(i => {
         corpo[i.dataset.k] = i.type === 'checkbox' ? (i.checked ? 1 : 0)
                            : i.type === 'number' ? (+i.value || 0)
-                           : (i.dataset.k === 'local_id' ? +i.value : i.value);
+                           : (i.dataset.k === 'local_id' ? (+i.value || null) : i.value);
       });
       if (corpo.comprado_loja === LOJA_OUTRA) {
         const t = c.querySelector('[data-lojatxt]');
@@ -1301,6 +1387,16 @@ const escolheFaceta = arr => {
   return arr[0].c;
 };
 const nomeDaMarca = c => (LEX.marcas_nome && LEX.marcas_nome[c]) || c;
+/* A mesma chave que o servidor usa para decidir se duas bobines são a mesma
+   coisa: marca, material e cor reduzidos ao canónico. Aqui serve só para pôr os
+   parecidos à cabeça da lista de juntar. */
+function chaveFil(f) {
+  const c = g => {
+    const cand = achaFacetas([f.marca, f.material, f.cor].join(' '))[g];
+    return escolheFaceta(cand) || '';
+  };
+  return [c('marca'), c('material'), corCanonica(f.cor)].join('|');
+}
 
 /* Sufixos que fazem parte do NOME do material e não da cor. Sem eles, "PETG Pro"
    e "PLA+" ficavam reduzidos a "PETG" e "PLA" -- que é a chave interna do
@@ -1730,6 +1826,18 @@ let DEF = null;
    no computador. Até chegarem, valem estas. */
 let PREFS = {caixa: true, desenhar: false, seguir: true, estado: 'selado', diametro: 1.75, local: 0};
 async function desenhaDef() {
+  // aparência: aplica-se logo e fica no browser, sem ir ao servidor
+  $('#verImagem').value = VER.imagem;
+  $('#verImagem').onchange = e => {
+    VER.imagem = e.target.value; PREF.poe('ver.imagem', VER.imagem); desenhaLista();
+  };
+  const et = $('#verEtiqueta');
+  et.checked = !!VER.etiqueta;
+  $('#verEtiquetaTog').classList.toggle('on', !!VER.etiqueta);
+  et.onchange = () => {
+    VER.etiqueta = et.checked; PREF.poe('ver.etiqueta', VER.etiqueta);
+    $('#verEtiquetaTog').classList.toggle('on', et.checked); desenhaLista();
+  };
   DEF = await api('/api/definicoes');
   if (DEF.preferencias) PREFS = {...PREFS, ...DEF.preferencias};
   /* O formulário manual é montado no arranque, antes de as preferências

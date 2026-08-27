@@ -53,6 +53,10 @@ e lojas diferentes. Adicionar uma bobine que já existe **junta-a ao grupo**: a
 comparação é por significado e não por letras, por isso a mesma bobine comprada
 como "Black" numa loja e "Preto" noutra fica no mesmo sítio.
 
+**Aparência.** Em *Definições* dá para forçar o desenho ou a foto em todas as
+bobines e ligar/desligar a etiqueta do material — muda só o que se vê, nunca o
+que está gravado.
+
 **Vistas.** A lista mostra-se seguida ou agrupada por **local**, **marca**,
 **material** ou **cor**, com sub-ordenação (nome, mais filamento, mais bobines,
 adicionado há menos). A escolha fica guardada. No agrupamento por cor, "Jet

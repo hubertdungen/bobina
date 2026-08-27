@@ -30,7 +30,7 @@ import lexicon
 import lojas
 
 ROOT = Path(__file__).resolve().parent
-VERSAO = "1.8.0"
+VERSAO = "1.8.1"
 SESSION_COOKIE = "bobina_session"
 SESSION_DIAS = int(os.environ.get("BOBINA_SESSION_DAYS", "30"))
 MAX_BODY = int(os.environ.get("BOBINA_MAX_BODY", "2097152"))
@@ -283,22 +283,38 @@ def canon(texto: str, grupo: str) -> str:
     return " ".join(toks)
 
 
+def chave_material(texto: str) -> str:
+    """O material para efeitos de IDENTIDADE, que não é o mesmo que para pesquisa.
+
+    O canónico do léxico reduz "PLA+" a "pla" -- e faz bem, porque quem procura
+    "pla" quer ver os PLA+ também. Mas para decidir se duas bobines são a mesma
+    coisa isso está errado: PLA e PLA+ são produtos diferentes, com preços
+    diferentes. Aqui compara-se o texto como está escrito, só sem espaços nem
+    hífenes, para "PET-G", "PET G" e "PETG" continuarem a ser o mesmo."""
+    t = lexicon.norm(texto or "")
+    t = re.sub(r"\bplus\b", "+", t)          # "PLA plus" é o mesmo que "PLA+"
+    return re.sub(r"[\s-]+", "", t)
+
+
 def filamento_igual(uid: int, f: dict) -> dict | None:
     """O filamento que já existe e é, para todos os efeitos, este.
 
     Comparar texto não chegava: a mesma bobine comprada na Evolt ("Black") e na
     Core XY ("Preto") ficava em dois grupos separados, com dois históricos de
-    preço e duas contagens. O peso continua a contar -- um rolo de 1 kg e uma
-    amostra de 250 g são produtos diferentes, com preços por quilo diferentes."""
-    chave = (canon(f.get("marca"), "marca"),
-             canon(f.get("material"), "material"),
-             canon(f.get("cor"), "cor"),
-             round(float(f.get("peso_g") or 1000), 1))
+    preço e duas contagens. Compara-se por marca, material e cor CANÓNICOS.
+
+    O peso não entra na conta. Um PETG Glacier White de 250 g e um de 1 kg são o
+    mesmo filamento comprado em tamanhos diferentes -- e como cada bobine guarda
+    o seu próprio peso e o seu próprio preço, o €/kg de cada uma continua certo
+    mesmo estando as duas no mesmo grupo. Separá-las só dava dois grupos de um."""
+    def chave(x: dict) -> tuple:
+        return (canon(x.get("marca"), "marca"),
+                chave_material(x.get("material")),
+                canon(x.get("cor"), "cor"))
+
+    alvo = chave(f)
     for existente in linhas("SELECT * FROM filamentos WHERE user_id=?", (uid,)):
-        if (canon(existente["marca"], "marca"),
-                canon(existente["material"], "material"),
-                canon(existente["cor"], "cor"),
-                round(float(existente["peso_g"] or 0), 1)) == chave:
+        if chave(dict(existente)) == alvo:
             return existente
     return None
 
@@ -617,6 +633,16 @@ def ciclo_tracker() -> None:
 CAMPOS_FILAMENTO = ["marca", "material", "cor", "cor_hex", "diametro", "peso_g",
                     "densidade", "temp_bico", "temp_mesa", "ref", "url", "imagem",
                     "loja", "etiquetas", "notas", "icone", "seguir", "seguir_query"]
+def _local_ou_nada(v) -> int | None:
+    """0 e "" vêm do select quando se escolhe "sem local". Guardar 0 rebentava a
+    chave estrangeira -- não existe nenhum local com id 0."""
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
 CAMPOS_BOBINE = ["filamento_id", "etiqueta", "local_id", "peso_liquido_g", "restante_g",
                  "tara_g", "estado", "preco", "moeda", "comprado_em", "comprado_loja",
                  "comprado_url", "aberto_em", "caixa", "notas"]
@@ -846,6 +872,23 @@ class Handler(SimpleHTTPRequestHandler):
         self._escreve("DELETE")
 
     def _escreve(self, metodo: str) -> None:
+        """Nunca deixar uma excepção matar a ligação.
+
+        Um `local_id` a 0 rebentava o FOREIGN KEY, a excepção subia, e o browser
+        recebia uma resposta vazia: o diálogo de guardar ficava aberto, sem erro
+        nenhum à vista, e só um refresh à página o tirava de lá. Erros têm de
+        chegar como texto que se leia."""
+        try:
+            self._escreve_impl(metodo)
+        except Exception as e:  # noqa: BLE001
+            import traceback
+            traceback.print_exc()
+            try:
+                self.erro(f"não consegui guardar: {type(e).__name__}: {e}"[:300], 500)
+            except Exception:  # noqa: BLE001 - já não há resposta possível
+                pass
+
+    def _escreve_impl(self, metodo: str) -> None:
         u = urllib.parse.urlparse(self.path)
         caminho, q = u.path, urllib.parse.parse_qs(u.query)
         corpo = self.corpo()
@@ -963,6 +1006,23 @@ class Handler(SimpleHTTPRequestHandler):
                         " actualizado_em=? WHERE id=? AND user_id=?",
                         (*campos.values(), t, fid, uid))
             return self.json({"ok": True, "bobines_ajustadas": arrastadas})
+        m = re.match(r"^/api/filamentos/(\d+)/juntar$", caminho)
+        if m and metodo == "POST":
+            origem = int(m.group(1))
+            destino = int(corpo.get("destino_id") or 0)
+            if origem == destino:
+                return self.erro("são o mesmo filamento")
+            for x in (origem, destino):
+                if not linha("SELECT 1 FROM filamentos WHERE id=? AND user_id=?", (x, uid)):
+                    return self.erro("filamento desconhecido", 404)
+            # as bobines e o histórico de preços passam para o destino; a cada
+            # bobine o SEU peso e o SEU preço vão com ela, por isso o €/kg não muda
+            n = altera("UPDATE bobines SET filamento_id=?, actualizado_em=?"
+                       " WHERE filamento_id=? AND user_id=?", (destino, t, origem, uid))
+            altera("UPDATE precos SET filamento_id=? WHERE filamento_id=?", (destino, origem))
+            executa("DELETE FROM filamentos WHERE id=? AND user_id=?", (origem, uid))
+            return self.json({"ok": True, "bobines_movidas": n, "destino_id": destino})
+
         m = re.match(r"^/api/filamentos/(\d+)/precos$", caminho)
         if m and metodo == "POST":
             return self.json(actualiza_precos(int(m.group(1)), uid))
@@ -970,6 +1030,8 @@ class Handler(SimpleHTTPRequestHandler):
         # ---- bobines ----
         if caminho == "/api/bobines" and metodo == "POST":
             campos = {k: corpo[k] for k in CAMPOS_BOBINE if k in corpo}
+            if "local_id" in campos:
+                campos["local_id"] = _local_ou_nada(campos["local_id"])
             fid = int(campos.get("filamento_id") or 0)
             f = linha("SELECT peso_g FROM filamentos WHERE id=? AND user_id=?", (fid, uid))
             if not f:
@@ -996,6 +1058,8 @@ class Handler(SimpleHTTPRequestHandler):
                 executa("DELETE FROM bobines WHERE id=? AND user_id=?", (bid, uid))
                 return self.json({"ok": True})
             campos = {k: corpo[k] for k in CAMPOS_BOBINE if k in corpo}
+            if "local_id" in campos:
+                campos["local_id"] = _local_ou_nada(campos["local_id"])
             if "restante_g" in campos or "peso_liquido_g" in campos:
                 b = linha("SELECT peso_liquido_g, restante_g FROM bobines"
                           " WHERE id=? AND user_id=?", (bid, uid)) or {}
