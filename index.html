@@ -1301,16 +1301,20 @@ async function abreFilamento(fid) {
         <div class="field"><label>Restante (g)</label>
           <input type="number" min="0" step="10" data-k="restante_g" value="${b.restante_g ?? ''}"></div>
       </div>
-      <div class="row" style="margin-top:8px;gap:6px">
-        ${[['cheia',1],['¾',.75],['½',.5],['¼',.25],['vazia',0]].map(([t, fr]) =>
-          `<span class="chip" data-frac="${fr}">${t}</span>`).join('')}
-        <label class="tog${+b.caixa ? ' on' : ''}" data-caixa>
-          <input type="checkbox" data-k="caixa" ${+b.caixa ? 'checked' : ''}>${CAIXA_MINI} caixa</label>
-        <label class="tog${+b.na_impressora ? ' on' : ''}" data-imp>
-          <input type="checkbox" data-k="na_impressora" ${+b.na_impressora ? 'checked' : ''}>${
-            NOZZLE} na impressora</label>
-        <span class="sub" data-pct></span>
-        <button class="ghost danger" data-del="${b.id}" style="margin-left:auto">apagar</button>
+      <div class="row" style="margin-top:8px;gap:6px;flex-wrap:nowrap;align-items:flex-start">
+        <!-- os chips e os interruptores dobram cá dentro; o apagar fica sempre
+             na primeira linha, senão sobrava-lhe uma linha inteira só para ele -->
+        <div class="row" style="gap:6px;margin-bottom:0;flex:1">
+          ${[['cheia',1],['¾',.75],['½',.5],['¼',.25],['vazia',0]].map(([t, fr]) =>
+            `<span class="chip" data-frac="${fr}">${t}</span>`).join('')}
+          <label class="tog${+b.caixa ? ' on' : ''}" data-caixa>
+            <input type="checkbox" data-k="caixa" ${+b.caixa ? 'checked' : ''}>${CAIXA_MINI} caixa</label>
+          <label class="tog${+b.na_impressora ? ' on' : ''}" data-imp>
+            <input type="checkbox" data-k="na_impressora" ${+b.na_impressora ? 'checked' : ''}>${
+              NOZZLE} na impressora</label>
+          <span class="sub" data-pct></span>
+        </div>
+        <button class="ghost danger" data-del="${b.id}">apagar</button>
       </div>
       <div class="grid c3" style="gap:8px;margin-top:8px">
         <div class="field"><label>Onde comprei</label>
@@ -2212,7 +2216,7 @@ async function entrar(registar) {
 }
 
 async function arranca() {
-  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.13.2')]);
+  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.13.3')]);
   LEX = lex;
   if (!me.user) {
     $('#gate').hidden = false;
