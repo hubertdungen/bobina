@@ -348,14 +348,16 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
       <div class="field"><label>Material</label><input id="mMat" placeholder="ASA"></div>
       <div class="field"><label>Cor</label><input id="mCor" placeholder="Preto"></div>
       <div class="field"><label>Peso (g)</label><input id="mPeso" type="number" value="1000"></div>
-      <div class="field"><label>Preço pago (€)</label><input id="mPreco" type="number" step="0.01"></div>
+      <div class="field"><label id="mPrecoLab">Preço pago (€)</label>
+        <input id="mPreco" type="number" step="0.01"></div>
       <div class="field"><label>Onde comprei</label>
         <select id="mLoja"></select>
         <input id="mLojaTxt" placeholder="nome da loja" hidden style="margin-top:6px"></div>
       <div class="field"><label>Quando comprei</label><input id="mData" type="date"></div>
       <div class="field"><label>Quantas bobines</label><input id="mQtd" type="number" value="1" min="1"></div>
       <div class="field" id="mRestWrap"><label>Restante (g)</label>
-        <input id="mRest" type="number" min="0" step="10" value="1000"></div>
+        <input id="mRest" type="number" min="0" step="10" value="1000">
+        <div class="chips" id="mFracs" style="margin-top:6px"></div></div>
       <div class="field"><label>Onde fica</label><select id="mLocal"></select></div>
       <div class="field"><label>Estado</label><select id="mEstado">
         <option value="selado">selado</option><option value="aberto">aberto</option></select></div>
@@ -688,6 +690,11 @@ function estadoCaixa(bs) {
 const BOBINA_MINI = `<svg viewBox="0 0 48 48" width="13" height="13" style="vertical-align:-2px"
   fill="none" stroke="currentColor" stroke-width="3.4" aria-hidden="true">
   <circle cx="24" cy="24" r="19"/><circle cx="24" cy="24" r="6.5"/></svg>`;
+/* Os atalhos do que resta. Vivem aqui porque são os mesmos nos três sítios que
+   os desenham: o detalhe da bobine e os dois formulários de adicionar. */
+const FRACOES = [['cheia', 1], ['¾', .75], ['½', .5], ['¼', .25], ['vazia', 0]];
+const chipsFrac = () => FRACOES.map(([t, fr]) =>
+  `<span class="chip" data-frac="${fr}">${t}</span>`).join('');
 const CAIXA_MINI = `<svg viewBox="0 0 48 48" width="13" height="13" style="vertical-align:-2px"
   fill="none" stroke="currentColor" stroke-width="3.4" aria-hidden="true">
   <path d="M8 18 h32 v20 a3 3 0 0 1 -3 3 h-26 a3 3 0 0 1 -3 -3 z" stroke-linejoin="round"/>
@@ -1374,10 +1381,7 @@ async function abreFilamento(fid) {
         <div class="field"><label>Restante (g) <span class="pctlbl" data-pct></span></label>
           <input type="number" min="0" step="10" data-k="restante_g" value="${b.restante_g ?? ''}"></div>
       </div>
-      <div class="row" style="margin-top:8px;gap:5px">
-        ${[['cheia',1],['¾',.75],['½',.5],['¼',.25],['vazia',0]].map(([t, fr]) =>
-          `<span class="chip" data-frac="${fr}">${t}</span>`).join('')}
-      </div>
+      <div class="row" style="margin-top:8px;gap:5px">${chipsFrac()}</div>
       <div class="grid c3" style="gap:8px;margin-top:10px">
         <div class="field"><label>Onde comprei</label>
           <select data-k="comprado_loja">${opcoesLoja(b.comprado_loja)}</select>
@@ -1780,7 +1784,7 @@ async function adicionaDeLoja(p) {
       <div class="field"><label>Material</label><input id="xMat" value="${esc(g.material)}"></div>
       <div class="field"><label>Cor</label><input id="xCor" value="${esc(g.cor)}"></div>
       <div class="field"><label>Peso (g)</label><input id="xPeso" type="number" min="0" step="10" value="${p.peso_g || 1000}"></div>
-      <div class="field"><label>Preço pago (€)</label>
+      <div class="field"><label id="xPrecoLab">Preço pago (€)</label>
         <input id="xPreco" type="number" step="0.01" min="0" value="${p.preco ?? ''}">
         <span class="sub" id="xPrecoNota"></span></div>
       <div class="field"><label>Onde comprei</label>
@@ -1790,7 +1794,8 @@ async function adicionaDeLoja(p) {
         <input id="xData" type="date" value="${new Date().toISOString().slice(0, 10)}"></div>
       <div class="field"><label>Quantas</label><input id="xQtd" type="number" value="1" min="1"></div>
       <div class="field" id="xRestWrap"><label>Restante (g)</label>
-        <input id="xRest" type="number" min="0" step="10" value="${p.peso_g || 1000}"></div>
+        <input id="xRest" type="number" min="0" step="10" value="${p.peso_g || 1000}">
+        <div class="chips" style="margin-top:6px">${chipsFrac()}</div></div>
       <div class="field"><label>Onde fica</label><select id="xLocal">${
         opcoesLocal(+PREFS.local || null, {vazio: '— sem local —'})}</select></div>
       <div class="field"><label>Como fica</label>
@@ -1837,6 +1842,13 @@ async function adicionaDeLoja(p) {
     dlg.querySelector('#xCaixaChip').classList.toggle('on', e.target.checked);
   dlg.querySelector('#xImp').onchange = e =>
     dlg.querySelector('#xImpChip').classList.toggle('on', e.target.checked);
+  dlg.querySelector('#xRestWrap').addEventListener('click', e => {
+    const b = e.target.closest('[data-frac]'); if (!b) return;
+    const fr = +b.dataset.frac;
+    rest.value = Math.round((+peso.value || 0) * fr);
+    restSegue = fr === 1;
+    cheio();
+  });
   const togIc = dlg.querySelector('#xIcone');
   if (togIc) togIc.onchange = () => {
     dlg.querySelector('#xIconeTog').classList.toggle('on', togIc.checked); desenha();
@@ -1913,6 +1925,8 @@ async function adicionaDeLoja(p) {
   const soUma = () => {
     const uma = +qtd.value === 1;
     dlg.querySelector('#xRestWrap').hidden = !uma;
+    /* o preço é gravado em CADA bobine: com três, "pago" lia-se como o total */
+    dlg.querySelector('#xPrecoLab').textContent = uma ? 'Preço pago (€)' : 'Preço por bobine (€)';
     /* montar TRÊS bobines de uma vez é mentira: a três, o interruptor sai da
        frente e não se grava -- a mesma regra do "restante" aqui ao lado */
     const ci = dlg.querySelector('#xImpChip');
@@ -2242,6 +2256,19 @@ function montaPickerManual() {
   mHex = ligaPicker(document, 'man', v => { escolhido = v; desenha(); });
   $('#mCaixaChip').querySelector('.cxglifo').innerHTML = CAIXA_MINI;
   $('#mImpChip').querySelector('.nozglifo').innerHTML = NOZZLE;
+  $('#mFracs').innerHTML = chipsFrac();
+  $('#mFracs').addEventListener('click', e => {
+    const b = e.target.closest('[data-frac]'); if (!b) return;
+    const fr = +b.dataset.frac;
+    $('#mRest').value = Math.round((+$('#mPeso').value || 0) * fr);
+    /* escolher uma fracção é decidir à mão; só "cheia" volta a deixar o restante
+       seguir o peso, que é o que "cheia" quer dizer */
+    $('#mRest').dataset.seguePeso = fr === 1 ? '1' : '0';
+    /* meia bobine não está selada -- o servidor corrigia na mesma ao gravar,
+       mas o ecrã ficava a dizer outra coisa */
+    if (fr < 1 && $('#mEstado').value === 'selado') $('#mEstado').value = 'aberto';
+    cheioM();
+  });
   $('#mImp').onchange = e => $('#mImpChip').classList.toggle('on', e.target.checked);
   $('#mData').value = new Date().toISOString().slice(0, 10);
   $('#mCaixa').checked = !!PREFS.caixa;
@@ -2252,6 +2279,7 @@ function montaPickerManual() {
   const soUmaM = () => {
     const uma = +$('#mQtd').value === 1;
     $('#mRestWrap').hidden = !uma;
+    $('#mPrecoLab').textContent = uma ? 'Preço pago (€)' : 'Preço por bobine (€)';
     $('#mImpChip').hidden = !uma;
     if (!uma) { $('#mImp').checked = false; $('#mImpChip').classList.remove('on'); }
   };
@@ -2300,7 +2328,7 @@ async function entrar(registar) {
 }
 
 async function arranca() {
-  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.17.0')]);
+  const [me, lex] = await Promise.all([api('/api/auth/me'), api('/api/lexicon?v=1.17.1')]);
   LEX = lex;
   if (!me.user) {
     $('#gate').hidden = false;
