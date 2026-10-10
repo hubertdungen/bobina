@@ -125,6 +125,30 @@ fica de fora — somar menos é melhor do que inventar um preço. O agente
 **Preview** não escreve nada, o **Apply** aplica e guarda a reversão para se
 poder **anular**. Claude, GPT, Gemini ou DeepSeek, à escolha em Definições.
 
+**Arrumar (para depois de uma mudança).** Uma aba com o monte do que ainda não tem
+sítio à esquerda e os contentores à direita. Arrasta-se de um para o outro com o
+rato, ou com o dedo no tablet (segura-se um instante e arrasta-se; deslizar logo
+continua a rolar a lista) — ou toca-se na bobine e depois no contentor. Os
+contentores **são os locais**: o que se arruma aqui vale para a lista, o agente e o
+Fatia.
+
+Cada contentor diz o que **aceita**: tipo (PLA normais, PLA especiais — madeira,
+silk, LW/foam, glitter, metálicos, CF, HD —, PETG, Engenharia — ABS, ASA, PC,
+Nylon, TPU —, Outros) ou material, e se se quiser só certas famílias de cor e/ou só
+seladas/abertas. As prateleiras sem regras herdam as da estante. A partir daí cada
+bobine do monte traz o sítio sugerido (material escolhido pesa mais do que tipo;
+bobines iguais ficam juntas; a capacidade é respeitada, também ao pôr várias de uma
+vez). As famílias de cor saem da cor **desenhada** e não do texto, por isso
+"Glacier White", "Branco" e "Rapid White" são todos brancos.
+
+O monte vê-se por cor, por tipo, tudo, ou em **rondas aleatórias** de 5–6 bobines
+para procurar no meio da pilha. Há "pôr no sítio sugerido" por grupo ou para tudo,
+e desfazer passo a passo. **Nova mudança** devolve tudo ao monte (as impressoras
+podem ficar) e pode apagar os contentores antigos; fica um retrato do antes — cada
+bobine mostra "antes: …", o **+** oferece os contentores antigos com as regras
+deduzidas do que lá estava, e a mudança inteira anula-se de uma vez (os
+contentores apagados voltam com o mesmo id).
+
 **Ponte para o Fatia.** O [Fatia](https://github.com/hubertdungen/fatia) escolhe os
 filamentos daqui **em direto**, sem importar nada: `/api/fatia/filamentos` devolve, por
 filamento, o custo real por quilo (do que foi mesmo pago), o melhor preço visto nas lojas,

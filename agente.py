@@ -51,6 +51,8 @@ arrumação. Regras:
 - Respeita a capacidade de cada local. Nunca ponhas mais bobines num local do
   que a capacidade indicada (capacidade 0 significa desconhecida — nesse caso
   sê conservador e diz-lo num aviso).
+- Um local pode dizer o que aceita (categorias, materiais, cores, estado). Só
+  ponhas lá bobines que caibam nessas regras; um local sem regras aceita tudo.
 - Só propões locais novos se forem mesmo precisos. Nomes curtos, concretos e em
   português ("Caixa seca PETG", "Estante A — prateleira 2"), nada de nomes
   genéricos tipo "Zona 1".
@@ -214,13 +216,14 @@ def descreve_inventario(locais: list[dict], filamentos: list[dict],
         if b.get("local_id"):
             ocupacao[b["local_id"]] = ocupacao.get(b["local_id"], 0) + 1
 
-    linhas = ["LOCAIS (id | nome | tipo | dentro de | capacidade | bobines lá agora)"]
+    linhas = ["LOCAIS (id | nome | tipo | dentro de | capacidade | bobines lá agora | aceita)"]
     nomes = {l["id"]: l["nome"] for l in locais}
     for l in locais:
         pai = nomes.get(l.get("pai_id")) or "—"
         cap = l.get("capacidade") or 0
         linhas.append(f"  {l['id']} | {l['nome']} | {l.get('tipo') or '?'} | {pai} | "
-                      f"{cap or 'desconhecida'} | {ocupacao.get(l['id'], 0)}")
+                      f"{cap or 'desconhecida'} | {ocupacao.get(l['id'], 0)} | "
+                      f"{l.get('aceita') or 'tudo'}")
 
     linhas.append("")
     linhas.append("BOBINES (id | marca material cor | estado | restante | onde está)")

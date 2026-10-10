@@ -31,7 +31,7 @@ import lexicon
 import lojas
 
 ROOT = Path(__file__).resolve().parent
-VERSAO = "1.18.2"
+VERSAO = "1.19.0"
 SESSION_COOKIE = "bobina_session"
 SESSION_DIAS = int(os.environ.get("BOBINA_SESSION_DAYS", "30"))
 MAX_BODY = int(os.environ.get("BOBINA_MAX_BODY", "2097152"))
@@ -79,6 +79,9 @@ CREATE TABLE IF NOT EXISTS locais (
   tipo TEXT DEFAULT 'prateleira',
   notas TEXT DEFAULT '',
   capacidade INTEGER DEFAULT 0,
+  -- o que o contentor aceita, em JSON: {"cat": [...], "mat": [...], "cor": [...],
+  -- "estado": [...]}. Vazio = aceita tudo. Quem interpreta é a aba Arrumar.
+  aceita TEXT DEFAULT '',
   ordem INTEGER DEFAULT 0,
   criado_em INTEGER NOT NULL
 );
@@ -204,6 +207,8 @@ def abre_db(data_dir: Path) -> sqlite3.Connection:
     colunas = {r[1] for r in con.execute("PRAGMA table_info(locais)")}
     if "capacidade" not in colunas:
         con.execute("ALTER TABLE locais ADD COLUMN capacidade INTEGER DEFAULT 0")
+    if "aceita" not in colunas:
+        con.execute("ALTER TABLE locais ADD COLUMN aceita TEXT DEFAULT ''")
     cols_fil = {r[1] for r in con.execute("PRAGMA table_info(filamentos)")}
     if "icone" not in cols_fil:
         con.execute("ALTER TABLE filamentos ADD COLUMN icone INTEGER DEFAULT 0")
@@ -843,7 +848,7 @@ def _local_ou_nada(v) -> int | None:
 CAMPOS_BOBINE = ["filamento_id", "etiqueta", "local_id", "peso_liquido_g", "restante_g",
                  "tara_g", "estado", "preco", "moeda", "comprado_em", "comprado_loja",
                  "comprado_url", "aberto_em", "caixa", "na_impressora", "notas"]
-CAMPOS_LOCAL = ["nome", "pai_id", "tipo", "notas", "capacidade", "ordem"]
+CAMPOS_LOCAL = ["nome", "pai_id", "tipo", "notas", "capacidade", "ordem", "aceita"]
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -1071,7 +1076,19 @@ class Handler(SimpleHTTPRequestHandler):
             "precos": por_fil,
             "lojas": lojas.LOJAS,
             "versao": VERSAO,
+            "mudanca": self._ultima_mudanca(uid),
         }
+
+    def _ultima_mudanca(self, uid: int) -> dict | None:
+        """O retrato da última mudança ainda em vigor: de onde veio cada bobine
+        e que contentores havia. A aba Arrumar usa-o como histórico."""
+        for p in linhas("SELECT id, plano, criado_em FROM planos WHERE user_id=?"
+                        " AND estado='aplicado' AND instrucoes LIKE 'mudança%'"
+                        " ORDER BY id DESC LIMIT 1", (uid,)):
+            retrato = json.loads(p["plano"])
+            return {"id": p["id"], "em": p["criado_em"], "antes": retrato.get("antes", {}),
+                    "locais": retrato.get("locais", [])}
+        return None
 
     # ----------------------------------------------------------- POST/PATCH --
     def do_POST(self) -> None:  # noqa: N802
@@ -1198,6 +1215,8 @@ class Handler(SimpleHTTPRequestHandler):
         # ---- locais ----
         if caminho == "/api/locais" and metodo == "POST":
             campos = {k: corpo.get(k) for k in CAMPOS_LOCAL if k in corpo}
+            if isinstance(campos.get("aceita"), dict):
+                campos["aceita"] = json.dumps(campos["aceita"], ensure_ascii=False)
             if not (campos.get("nome") or "").strip():
                 return self.erro("o local precisa de nome")
             if campos.get("pai_id") and not linha(
@@ -1217,6 +1236,8 @@ class Handler(SimpleHTTPRequestHandler):
                 executa("DELETE FROM locais WHERE id=? AND user_id=?", (lid, uid))
                 return self.json({"ok": True})
             campos = {k: corpo[k] for k in CAMPOS_LOCAL if k in corpo}
+            if isinstance(campos.get("aceita"), dict):
+                campos["aceita"] = json.dumps(campos["aceita"], ensure_ascii=False)
             if "pai_id" in campos:
                 bruto = campos["pai_id"]
                 pai = int(bruto) if str(bruto or "").strip() not in ("", "0", "None") else None
@@ -1372,6 +1393,12 @@ class Handler(SimpleHTTPRequestHandler):
         if caminho == "/api/agente/anular" and metodo == "POST":
             return self.json(self._anular(uid, int(corpo.get("plano_id") or 0)))
 
+        # ---- aba Arrumar ----
+        if caminho == "/api/arrumar" and metodo == "POST":
+            return self.json(self._arrumar(uid, corpo, t))
+        if caminho == "/api/mudanca" and metodo == "POST":
+            return self.json(self._mudanca(uid, corpo, t))
+
         # ---- adicionar a partir de um resultado de loja, num pedido só ----
         if caminho == "/api/adicionar" and metodo == "POST":
             return self.json(self._adicionar(uid, corpo, t))
@@ -1452,6 +1479,84 @@ class Handler(SimpleHTTPRequestHandler):
         return {"ok": True, "plano_id": pid, "plano": r}
 
     # ------------------------------------------------------- agente (apply) --
+    def _arrumar(self, uid: int, corpo: dict, t: int) -> dict:
+        """Mover várias bobines de uma vez (arrastar uma, ou "pôr todas onde é
+        sugerido"). `local_id` nulo devolve a bobine ao monte do "por arrumar".
+        Valida-se tudo antes de escrever: ou entram todas, ou nenhuma."""
+        movs = corpo.get("movimentos")
+        if not isinstance(movs, list) or not movs:
+            return {"erro": "nada para mover"}
+        meus_locais = {r["id"] for r in linhas("SELECT id FROM locais WHERE user_id=?", (uid,))}
+        minhas = {r["id"] for r in linhas("SELECT id FROM bobines WHERE user_id=?", (uid,))}
+        pares = []
+        for m in movs:
+            bid, lid = int(m.get("bobine_id") or 0), _local_ou_nada(m.get("local_id"))
+            if bid not in minhas:
+                return {"erro": f"bobine {bid} desconhecida"}
+            if lid is not None and lid not in meus_locais:
+                return {"erro": "esse contentor já não existe"}
+            pares.append((lid, t, bid, uid))
+        with DB_LOCK:
+            DB.executemany("UPDATE bobines SET local_id=?, actualizado_em=?"
+                           " WHERE id=? AND user_id=?", pares)
+            DB.commit()
+        return {"ok": True, "movidas": len(pares)}
+
+    def _mudanca(self, uid: int, corpo: dict, t: int) -> dict:
+        """Começar a arrumar do zero: as bobines voltam ao monte e, se se pedir,
+        os contentores antigos desaparecem. Fica um retrato do ANTES na tabela
+        `planos` -- é o histórico (onde estava cada bobine, que regras tinha cada
+        contentor) e é o que deixa o Anular repor tudo."""
+        manter_imp = bool(corpo.get("manter_impressoras", True))
+        apagar = bool(corpo.get("apagar_locais", False))
+        locais = {l["id"]: l for l in linhas("SELECT * FROM locais WHERE user_id=?", (uid,))}
+
+        def na_impressora(lid) -> bool:
+            visto = set()
+            while lid and lid in locais and lid not in visto:
+                visto.add(lid)
+                if locais[lid]["tipo"] == "impressora":
+                    return True
+                lid = locais[lid]["pai_id"]
+            return False
+
+        antes, movidos, ficam = {}, [], set()
+        for b in linhas("SELECT id, local_id FROM bobines WHERE user_id=?", (uid,)):
+            if not b["local_id"]:
+                continue
+            antes[b["id"]] = _caminho_local(b["local_id"], locais)
+            if manter_imp and na_impressora(b["local_id"]):
+                ficam.add(b["local_id"])
+                continue
+            movidos.append({"bobine_id": b["id"], "local_id": b["local_id"]})
+        # um contentor que ainda guarda bobines não se apaga, nem os que o contêm;
+        # com as impressoras mantidas, também elas ficam, mesmo vazias
+        presos = set()
+        for lid in ficam | ({i for i in locais if na_impressora(i)} if manter_imp else set()):
+            while lid and lid in locais and lid not in presos:
+                presos.add(lid)
+                lid = locais[lid]["pai_id"]
+        apagados = [l for i, l in locais.items() if apagar and i not in presos]
+        with DB_LOCK:
+            DB.executemany("UPDATE bobines SET local_id=NULL, actualizado_em=?"
+                           " WHERE id=? AND user_id=?",
+                           [(t, m["bobine_id"], uid) for m in movidos])
+            DB.executemany("DELETE FROM locais WHERE id=? AND user_id=?",
+                           [(l["id"], uid) for l in apagados])
+            DB.commit()
+        retrato = {"tipo": "mudanca", "antes": antes,
+                   "locais": [{"nome": _caminho_local(i, locais), "tipo": l["tipo"],
+                               "capacidade": l["capacidade"], "aceita": l.get("aceita") or ""}
+                              for i, l in locais.items()]}
+        pid = executa("INSERT INTO planos(user_id,instrucoes,plano,reversao,estado,criado_em,"
+                      "aplicado_em) VALUES(?,?,?,?,?,?,?)",
+                      (uid, "mudança — tudo de volta ao monte",
+                       json.dumps(retrato, ensure_ascii=False),
+                       json.dumps({"movidos": movidos, "apagados": apagados},
+                                  ensure_ascii=False), "aplicado", t, t))
+        return {"ok": True, "plano_id": pid, "soltas": len(movidos),
+                "apagados": len(apagados), "ficaram": len(antes) - len(movidos)}
+
     def _aplicar(self, uid: int, pid: int, t: int) -> dict:
         p = linha("SELECT * FROM planos WHERE id=? AND user_id=?", (pid, uid))
         if not p:
@@ -1516,6 +1621,21 @@ class Handler(SimpleHTTPRequestHandler):
             return {"erro": "só se anula um plano que tenha sido aplicado"}
         rev = json.loads(p["reversao"] or "{}")
         t = agora()
+        # uma mudança pode ter apagado contentores: voltam com o mesmo id (o
+        # AUTOINCREMENT nunca o reaproveita), e só depois se lhes liga o pai
+        apagados = rev.get("apagados", [])
+        for l in apagados:
+            if not linha("SELECT 1 FROM locais WHERE id=?", (l["id"],)):
+                executa("INSERT INTO locais(id,user_id,nome,pai_id,tipo,notas,capacidade,"
+                        "aceita,ordem,criado_em) VALUES(?,?,?,NULL,?,?,?,?,?,?)",
+                        (l["id"], uid, l["nome"], l.get("tipo"), l.get("notas") or "",
+                         l.get("capacidade") or 0, l.get("aceita") or "",
+                         l.get("ordem") or 0, l.get("criado_em") or t))
+        for l in apagados:
+            if l.get("pai_id") and linha("SELECT 1 FROM locais WHERE id=? AND user_id=?",
+                                         (l["pai_id"], uid)):
+                executa("UPDATE locais SET pai_id=? WHERE id=? AND user_id=?",
+                        (l["pai_id"], l["id"], uid))
         for m in rev.get("movidos", []):
             executa("UPDATE bobines SET local_id=?, actualizado_em=? WHERE id=? AND user_id=?",
                     (m.get("local_id"), t, m["bobine_id"], uid))

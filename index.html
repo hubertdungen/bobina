@@ -246,6 +246,74 @@ input[type=color]{width:44px;height:32px;min-height:32px;padding:2px;cursor:poin
 .spark i{flex:1;background:var(--accent);opacity:.65;border-radius:2px 2px 0 0;min-height:2px}
 
 /* ---- assinatura DL X (igual à do Fatia) ---- */
+/* ---- arrumar: o monte à esquerda, os contentores à direita ---- */
+.arr{display:grid;grid-template-columns:minmax(300px,390px) 1fr;gap:14px;align-items:start}
+.arrmonte{position:sticky;top:8px;z-index:5;max-height:calc(100vh - 100px);overflow:auto;
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px;transition:.12s}
+.arrcab{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.arrmonte .searchbox input{font-size:14px;min-height:38px;padding:6px 10px;border-radius:10px;margin-top:8px}
+.arracoes{margin:8px 0}
+.arracoes:empty{display:none}
+.arrmudcard{margin-bottom:10px;background:var(--panel2);display:flex;flex-direction:column;gap:8px;padding:12px}
+/* no tablet ao alto e no telemóvel o monte fica colado ao topo e os
+   contentores passam por baixo: dá para arrastar de um para o outro na mesma */
+@media (max-width:820px){.arr{grid-template-columns:1fr}.arrmonte{top:0;max-height:42vh}}
+.peca{display:flex;gap:10px;align-items:center;padding:7px 8px;border:1px solid var(--line);border-radius:11px;
+  background:var(--panel2);margin-bottom:6px;cursor:grab;touch-action:pan-y;user-select:none;
+  -webkit-user-select:none;-webkit-touch-callout:none}
+.peca:hover{border-color:var(--accent)}
+.peca.sel,.mini.sel{border-color:var(--accent2);box-shadow:0 0 0 2px rgba(240,171,252,.35)}
+.peca.grande{padding:10px}
+.peca.grande .nm{font-size:15px}
+.pecamedia{flex:none;display:flex}
+.pecatxt{min-width:0;flex:1}
+.pecatxt .nm{font-weight:700;font-size:13px;line-height:1.25}
+.pecatxt .mt{font-size:11.5px;color:var(--dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sug{min-height:30px;padding:4px 9px;font-size:12px;flex:none;max-width:42%;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;color:var(--accent)}
+.semsitio{font-size:11px;color:var(--warn);flex:none}
+.arrgrupo{margin-bottom:10px}
+.arrgcab{display:flex;align-items:center;gap:7px;margin:4px 0 6px;font-size:13px}
+.arrgcab .sug{margin-left:auto}
+.sw{display:inline-block;width:12px;height:12px;border-radius:50%;border:1px solid rgba(255,255,255,.25);flex:none}
+.arrsec{margin-bottom:16px}
+.arrsec .arrsec{margin:10px 0 0 12px;padding-left:10px;border-left:2px solid var(--line)}
+.arrseccab{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.arrseccab .contnome{font-size:15px;max-width:300px}
+.conts{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+.cont{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:9px 10px;
+  min-height:118px;transition:.12s}
+.cont.cheio{border-color:rgba(255,107,107,.35)}
+.cont.aberto{grid-column:1/-1}
+.cont.aceita{border-color:rgba(167,139,250,.5)}
+.cont.melhor{border-color:var(--accent);box-shadow:0 0 0 2px rgba(167,139,250,.3)}
+.cont.sobre,.arrmonte.sobre{border-color:var(--accent2);background:rgba(240,171,252,.08);
+  box-shadow:0 0 0 2px rgba(240,171,252,.35)}
+/* enquanto se arrasta, o que não aceita a bobine apaga-se um pouco */
+body.a-arrastar .cont:not(.aceita):not(.sobre):not(.novo){opacity:.5}
+.conttopo{display:flex;align-items:center;gap:4px}
+.contnome{flex:1;min-width:0;background:transparent;border-color:transparent;font-weight:700;
+  padding:4px 6px;min-height:32px}
+.contnome:hover{border-color:var(--line)}
+.contnome.rot{color:var(--dim);font-size:13px}
+.conttopo .ghost,.arrseccab .ghost{min-height:30px;padding:3px 7px}
+.contregras{font-size:11.5px;color:var(--dim);margin:2px 6px 8px;line-height:1.3}
+.contbobs{display:flex;flex-wrap:wrap;gap:5px}
+.mini{display:inline-flex;flex-direction:column;align-items:center;gap:1px;padding:3px;
+  border:1px solid transparent;border-radius:8px;cursor:grab;touch-action:pan-y;user-select:none;
+  -webkit-user-select:none;-webkit-touch-callout:none}
+.mini:hover{border-color:var(--line)}
+.mini i{font-style:normal;font-size:8.5px;font-weight:800;color:var(--dim);letter-spacing:.3px;
+  max-width:42px;overflow:hidden;white-space:nowrap}
+.conted{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
+.conted h3{margin:10px 0 4px}
+.cont.novo{display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:300;
+  color:var(--dim);background:transparent;border:1.5px dashed var(--line);min-height:118px}
+.cont.novo:hover{color:var(--accent);border-color:var(--accent)}
+.cont.novo.aberto{display:block;font-size:13px;font-weight:400}
+.fantasma{position:fixed;left:0;top:0;z-index:100;pointer-events:none;opacity:.94;margin:0;
+  box-shadow:0 14px 34px rgba(0,0,0,.55);border-color:var(--accent);background:var(--panel2)}
+.aarrastar{opacity:.3}
 footer{margin:26px 0 10px;text-align:center;color:var(--dim);font-size:12px}
 .dlxsig{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px}
 .dlxsig .pw{font-size:10.5px;letter-spacing:1.6px;text-transform:uppercase;opacity:.55}
@@ -407,6 +475,38 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   <div id="locais"></div>
 </div>
 
+<!-- ---------- arrumar ---------- -->
+<div class="tabsec" id="tab-arrumar">
+  <div class="arr">
+    <div class="arrmonte" data-drop="0" id="arrMonte">
+      <div class="arrcab"><h2 style="margin:0">Por arrumar</h2><span class="pill" id="arrN">0</span>
+        <button class="ghost" id="arrMudBtn" style="margin-left:auto">Nova mudança…</button></div>
+      <div class="card arrmudcard" id="arrMud" hidden>
+        <b>Começar a arrumar do zero</b>
+        <div class="sub">As bobines voltam todas ao monte. Onde cada uma estava fica guardado
+          (aparece como "antes: …") e a mudança inteira anula-se de uma vez.</div>
+        <div class="row" style="gap:6px">
+          <label class="tog"><input type="checkbox" id="arrMudImp" checked>deixar as que estão nas impressoras</label>
+          <label class="tog"><input type="checkbox" id="arrMudApagar">apagar os contentores antigos</label></div>
+        <div class="sub">Os contentores apagados ficam no histórico com as regras que tinham —
+          voltam com um clique no +.</div>
+        <div class="row"><button class="primary" id="arrMudGo">Começar</button>
+          <button class="ghost" id="arrMudCancel">cancelar</button></div>
+        <div class="sub" id="arrMudUlt"></div>
+      </div>
+      <div class="bar"><i id="arrProg" style="width:0"></i></div>
+      <div class="sub" id="arrInfo" style="margin-top:4px"></div>
+      <div class="chips" id="arrModos"></div>
+      <div class="searchbox"><input id="arrQ" placeholder="procurar no monte…" autocomplete="off"
+           autocapitalize="off" spellcheck="false"></div>
+      <div class="row arracoes"><button class="primary" id="arrTudo" hidden></button>
+        <button class="ghost" id="arrDesf" hidden></button></div>
+      <div id="arrLista"></div>
+    </div>
+    <div id="arrConts"></div>
+  </div>
+</div>
+
 <!-- ---------- agente ---------- -->
 <div class="tabsec" id="tab-agente">
   <div class="card" style="margin-bottom:12px">
@@ -499,6 +599,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   <button data-tab="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Adicionar</button>
   <button data-tab="precos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 18l5-6 4 4 7-9"/></svg>Preços</button>
   <button data-tab="locais"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v5H4zM4 14h16v5H4z"/></svg>Locais</button>
+  <button data-tab="arrumar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7.5 12 3l9 4.5-9 4.5z"/><path d="M3 7.5v9L12 21l9-4.5v-9"/><path d="M12 12v9"/></svg>Arrumar</button>
   <button data-tab="agente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2.1 4.6 5 .6-3.7 3.4 1 5-4.4-2.5L7.6 16.6l1-5L4.9 8.2l5-.6z"/></svg>Agente</button>
   <button data-tab="def"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Definições</button>
 </nav>
@@ -2111,6 +2212,617 @@ function desenhaLocais() {
 }
 </script>
 <script>
+/* ============================ arrumar ============================ */
+/* A aba para quando está tudo amontoado (uma mudança de casa, estantes
+   novas): à esquerda o monte do que ainda não tem sítio, à direita os
+   contentores. Arrasta-se de um para o outro -- com o rato ou com o dedo -- ou
+   toca-se na bobine e depois no contentor. Os contentores SÃO os locais da aba
+   Locais: o que se arruma aqui vale para a lista, para o agente e para o Fatia.
+
+   Cada contentor diz o que aceita (categoria OU material, e se se quiser só
+   certas cores e/ou estado) e a app sugere o sítio de cada bobine. Sem regras
+   aceita tudo, mas só é sugerido em último caso. */
+const CATEGORIAS = [
+  ['pla', 'PLA normais', 'PLA, PLA+, Matte, Rapido/HS'],
+  ['pla_esp', 'PLA especiais', 'madeira, silk, LW/foam, glitter, metálicos, CF, HD…'],
+  ['petg', 'PETG', 'PETG, PCTG, PET'],
+  ['eng', 'Engenharia', 'ABS, ASA, PC, Nylon, TPU, PP…'],
+  ['outros', 'Outros', 'o que não cai em nenhuma das outras'],
+];
+const NOME_CAT = Object.fromEntries(CATEGORIAS.map(([k, n]) => [k, n]));
+/* procura-se no material E na cor: "Glitter Military Green" e "Azul Galaxia"
+   são PLA especiais mesmo com o material escrito só "PLA" */
+const RE_ESPECIAL = /\b(wood|madeira|silk|seda|lw|foam|leve|lightweight|aero|glitter|sparkle|marble|marmore|metal|metallic|metalico|galaxy|galaxia|glow|fosforescente|rainbow|arco.?iris|multicolou?r|dual|tri|bicolou?r|camaleao|chameleon|cf|carbon|carbono|gf|hd|ht|stone|pedra|cork|cortica)\b/;
+function categoria(f) {
+  const base = norm(materialBase(f)), txt = norm((f.material || '') + ' ' + (f.cor || ''));
+  if (/^(pla|pha)/.test(base)) return RE_ESPECIAL.test(txt) ? 'pla_esp' : 'pla';
+  if (/^(petg|pctg|pet)/.test(base)) return 'petg';
+  if (/^(abs|asa|pc|pa|nylon|tpu|tpe|flex|pp|pom|pei|peek|pekk|hips|pps|pvdf)/.test(base)
+      || /\b(nylon|tpu|flex)/.test(txt)) return 'eng';
+  return 'outros';
+}
+/* Famílias de cor pela cor desenhada (a mesma `corDoFil` dos cartões), não
+   pelo texto: "Glacier White", "Branco" e "Rapid White" caem todos nos
+   brancos, e a cor escolhida à mão também conta. */
+const FAMILIAS = [
+  ['preto', 'Pretos', '#141414'], ['branco', 'Brancos', '#f4f5f7'], ['cinza', 'Cinzentos', '#8a9099'],
+  ['castanho', 'Castanhos e beges', '#9a6a3a'], ['vermelho', 'Vermelhos', '#e03a3a'],
+  ['laranja', 'Laranjas e cobres', '#f08a24'], ['amarelo', 'Amarelos e dourados', '#e8c22c'],
+  ['verde', 'Verdes', '#3bb54a'], ['azul', 'Azuis', '#2f7fe0'], ['roxo', 'Roxos', '#8a4fd8'],
+  ['rosa', 'Rosas', '#ee6fb0'], ['transp', 'Transparentes', '#bfe3ee'], ['multi', 'Multicor', '#a78bfa'],
+];
+const NOME_FAM = Object.fromEntries(FAMILIAS.map(([k, n]) => [k, n]));
+const HEX_FAM = Object.fromEntries(FAMILIAS.map(([k, , h]) => [k, h]));
+function familia(f) {
+  const t = norm(f.cor || '');
+  // "galaxy" não: um "Azul Galaxia" é azul com brilhos, não multicor
+  if (/rainbow|arco.?iris|multi|dual|\btri\b|bicol|camale|chameleon/.test(t)) return 'multi';
+  if (eTransparente(f.cor)) return 'transp';
+  const [h, s, l] = rgb2hsl(hex2rgb(corDoFil(f)));
+  if (l < 0.16) return 'preto';
+  if (l > 0.86 || (s < 0.12 && l > 0.75)) return 'branco';
+  if (s < 0.15) return l < 0.25 ? 'preto' : 'cinza';
+  if (h < 15 || h >= 345) return l > 0.72 ? 'rosa' : 'vermelho';
+  if (h < 70 && s < 0.55 && l > 0.45) return 'castanho';      // areia (#dcc9a0), bege, madeira clara
+  if (h < 45) return l < 0.36 ? 'castanho' : 'laranja';
+  if (h < 70) return l < 0.33 ? 'castanho' : 'amarelo';
+  if (h < 165) return 'verde';
+  if (h < 255) return 'azul';
+  if (h < 290) return 'roxo';
+  return 'rosa';
+}
+const swatchFam = k => k === 'multi'
+  ? `<i class="sw" style="background:conic-gradient(#e03a3a,#e8c22c,#3bb54a,#2f7fe0,#8a4fd8,#e03a3a)"></i>`
+  : `<i class="sw" style="background:${HEX_FAM[k]}"></i>`;
+
+function regrasDe(l) {
+  try { const r = JSON.parse((l && l.aceita) || '{}'); return r && typeof r === 'object' ? r : {}; }
+  catch (e) { return {}; }
+}
+const temRegras = r => ['cat', 'mat', 'cor', 'estado'].some(k => (r[k] || []).length);
+/* um contentor sem regras herda as do primeiro antepassado que as tenha: uma
+   estante "PETG" com quatro prateleiras não obriga a configurar as quatro */
+function regrasEfectivas(id) {
+  let l = LOC[id], g = 0;
+  while (l && g++ < 12) {
+    const r = regrasDe(l);
+    if (temRegras(r)) return {r, de: l};
+    l = LOC[l.pai_id];
+  }
+  return {r: {}, de: null};
+}
+function resumoRegras(r) {
+  const p = [...(r.cat || []).map(k => NOME_CAT[k] || k), ...(r.mat || [])];
+  const c = (r.cor || []).map(k => (NOME_FAM[k] || k).toLowerCase());
+  const e = r.estado || [];
+  return [p.join(' · '), c.length ? 'só ' + c.join(', ') : '',
+          e.length ? 'só ' + e.join('/') + 's' : ''].filter(Boolean).join(' — ');
+}
+
+const estadoSimples = b => b.estado === 'selado' ? 'selado' : 'aberto';
+const noMonte = b => !['arquivado', 'vazio'].includes(b.estado) && !(b.local_id && LOC[b.local_id]);
+let MODO_ARR = PREF.ler('arr.modo', 'cor');      // ronda | cor | cat | todas
+let RONDA = [];                                    // ids da ronda aleatória em curso
+let SEL = 0;                                       // bobine tocada, à espera do contentor
+let CONT_ABERTO = 0;                               // contentor com as regras à vista
+let NOVO_ABERTO = null;                            // pai do "+" aberto (0 = raiz)
+let MUD_ABERTA = false;
+const DESFAZER = [];
+
+function arvoreLocais() {
+  const filhos = {};
+  for (const l of INV.locais) {
+    const pai = (l.pai_id && LOC[l.pai_id]) ? l.pai_id : 0;
+    (filhos[pai] ||= []).push(l);
+  }
+  // ordem de criação: o "+" acrescenta no fim, que é onde se está a olhar
+  for (const k in filhos) filhos[k].sort((a, b) => (a.ordem || 0) - (b.ordem || 0) || a.id - b.id);
+  return filhos;
+}
+function ocupacao() {
+  const n = {}, em = {};
+  for (const b of INV.bobines) {
+    if (b.estado === 'arquivado' || !b.local_id) continue;
+    n[b.local_id] = (n[b.local_id] || 0) + 1;
+    (em[b.local_id] ||= []).push(b);
+  }
+  return {n, em};
+}
+
+/* Quanto um contentor serve para uma bobine; -1 é "não aceita". Material
+   escolhido pesa mais do que categoria, que é mais larga; cor e estado somam.
+   Um contentor sem regras fica abaixo de qualquer um com regras, e uma
+   impressora sem regras nunca é sugerida (não se enche o AMS com o monte). */
+function pontua(b, l, oc) {
+  const f = FIL[b.filamento_id]; if (!f) return -1;
+  const cap = +l.capacidade || 0;
+  if (cap && (oc.n[l.id] || 0) >= cap && b.local_id !== l.id) return -1;
+  const {r} = regrasEfectivas(l.id);
+  const juntos = (oc.em[l.id] || []).some(x => x.filamento_id === b.filamento_id && x.id !== b.id);
+  if (!temRegras(r)) return l.tipo === 'impressora' ? -1 : 0.5 + (juntos ? 0.3 : 0);
+  let p = 0;
+  const cats = r.cat || [], mats = r.mat || [];
+  if (cats.length || mats.length) {
+    const okMat = mats.includes(materialBase(f)), okCat = cats.includes(categoria(f));
+    if (!okMat && !okCat) return -1;
+    p += okMat ? 6 : 3;
+  }
+  if ((r.cor || []).length) { if (!r.cor.includes(familia(f))) return -1; p += 4; }
+  if ((r.estado || []).length) { if (!r.estado.includes(estadoSimples(b))) return -1; p += 1; }
+  return p + (juntos ? 3 : 0);       // as bobines iguais ficam juntas
+}
+function alvos(filhos) { return INV.locais.filter(l => !(filhos[l.id] || []).length); }
+function sugere(b, oc, filhos) {
+  let melhor = null, pm = 0;
+  for (const l of alvos(filhos)) {
+    const p = pontua(b, l, oc);
+    // empate: o que tem mais espaço livre, para não encher sempre o primeiro
+    if (p > pm || (p === pm && melhor && p > 0 && livre(l, oc) > livre(melhor, oc))) { melhor = l; pm = p; }
+  }
+  return melhor;
+}
+const livre = (l, oc) => (+l.capacidade || 99) - (oc.n[l.id] || 0);
+/* Sugestões para um conjunto, contando com as anteriores: cinco bobines
+   pretas não vão todas para uma prateleira onde só cabem duas. */
+function sugereVarias(bs) {
+  const filhos = arvoreLocais(), oc = ocupacao(), out = [];
+  for (const b of bs) {
+    const l = sugere(b, oc, filhos);
+    if (!l) continue;
+    out.push({bobine_id: b.id, local_id: l.id});
+    oc.n[l.id] = (oc.n[l.id] || 0) + 1;
+    (oc.em[l.id] ||= []).push(b);
+  }
+  return out;
+}
+
+async function move(movs, msg) {
+  if (!movs.length) return;
+  const BOB = Object.fromEntries(INV.bobines.map(b => [b.id, b]));
+  const antes = movs.map(m => ({bobine_id: m.bobine_id, local_id: BOB[m.bobine_id]?.local_id || null}));
+  try {
+    const r = await api('/api/arrumar', {method: 'POST', body: JSON.stringify({movimentos: movs})});
+    if (r.erro) return toast(r.erro, 4000);
+    DESFAZER.push(antes);
+    SEL = 0;
+    await carrega();
+    if (msg) toast(msg);
+  } catch (e) { toast(e.message, 4000); }
+}
+const ondeNome = id => id ? (LOC[id]?.nome || 'contentor') : 'monte';
+
+/* ---------- o monte ---------- */
+/* o monte tal como se vê: com a pesquisa aplicada, menos na ronda. Os botões
+   de "pôr no sítio" agem sobre isto, e não sobre o que está escondido. */
+function monteVisivel() {
+  let m = INV.bobines.filter(noMonte);
+  const termos = termosDe($('#arrQ').value);
+  if (termos.length && MODO_ARR !== 'ronda')
+    m = m.filter(b => casa(norm(HAY[b.filamento_id] + ' ' + (b.etiqueta || '') + ' '
+      + (INV.mudanca?.antes?.[String(b.id)] || '')), termos));
+  return m;
+}
+function peca(b, oc, filhos, grande) {
+  const f = FIL[b.filamento_id] || {};
+  const s = sugere(b, oc, filhos);
+  const antes = INV.mudanca?.antes?.[String(b.id)];
+  return `<div class="peca${grande ? ' grande' : ''}${SEL === b.id ? ' sel' : ''}" data-bob="${b.id}">
+    <span class="pecamedia">${media(f, grande ? 52 : 38, [b])}</span>
+    <div class="pecatxt"><div class="nm">${esc(nomeFil(f) || "sem nome")}</div>
+      <div class="mt">${Math.round(+b.restante_g || 0)} g · ${esc(b.estado)}${
+        b.etiqueta ? ' · ' + esc(b.etiqueta) : ''}${antes ? ` · <span title="onde estava antes da mudança">antes: ${esc(antes)}</span>` : ''}</div></div>
+    ${s ? `<button class="sug" data-poe="${b.id}" data-para="${s.id}" title="pôr em ${esc(caminhoLocal(s.id))}">→ ${esc(s.nome)}</button>`
+        : '<span class="semsitio" title="nenhum contentor aceita esta bobine — muda as regras ou cria um com o +">sem sítio</span>'}
+  </div>`;
+}
+function desenhaMonte() {
+  const filhos = arvoreLocais(), oc = ocupacao();
+  const vivasTodas = INV.bobines.filter(b => !['arquivado', 'vazio'].includes(b.estado));
+  const feitas = vivasTodas.filter(b => !noMonte(b)).length;
+  const porArrumar = vivasTodas.length - feitas;
+  $('#arrN').textContent = porArrumar;
+  $('#arrProg').style.width = (vivasTodas.length ? feitas / vivasTodas.length * 100 : 0).toFixed(0) + '%';
+  $('#arrInfo').textContent = porArrumar
+    ? `${feitas} de ${vivasTodas.length} com sítio`
+    : (vivasTodas.length ? 'Está tudo arrumado.' : '');
+
+  $('#arrModos').innerHTML = [['ronda', 'Ronda aleatória'], ['cor', 'Por cor'], ['cat', 'Por tipo'], ['todas', 'Todas']]
+    .map(([k, n]) => `<span class="chip${MODO_ARR === k ? ' on' : ''}" data-modo="${k}">${n}</span>`).join('');
+  $('#arrQ').parentElement.hidden = MODO_ARR === 'ronda';
+
+  const termos = MODO_ARR === 'ronda' ? [] : termosDe($('#arrQ').value);
+  const monte = monteVisivel();
+  const nSug = sugereVarias(monte).length;
+  $('#arrTudo').textContent = `Pôr ${nSug === monte.length ? 'todas' : 'as ' + nSug} no sítio sugerido`;
+  $('#arrTudo').hidden = !nSug;
+  $('#arrDesf').hidden = !DESFAZER.length;
+  $('#arrDesf').textContent = `↶ desfazer (${DESFAZER.length})`;
+
+  let html = '';
+  if (!monte.length) {
+    html = `<div class="empty">${termos.length ? 'Nada no monte com isso.'
+      : 'O monte está vazio. Para recomeçar do zero usa <b>Nova mudança</b>.'}</div>`;
+  } else if (MODO_ARR === 'ronda') {
+    /* 5 a 6 ao calhas: procura-as no monte, arruma-as, e vem a ronda seguinte */
+    RONDA = RONDA.filter(id => monte.some(b => b.id === id));
+    if (!RONDA.length) {
+      const bar = [...monte].sort(() => Math.random() - 0.5);
+      RONDA = bar.slice(0, monte.length <= 6 ? monte.length : 5 + (Math.random() < 0.5 ? 1 : 0)).map(b => b.id);
+    }
+    html = `<div class="row" style="margin-bottom:8px"><span class="sub">Encontra estas no monte e arruma-as —
+      quando acabares vem outra ronda.</span><button class="ghost" id="arrOutra" style="margin-left:auto">outra ronda ↻</button></div>`
+      + RONDA.map(id => peca(monte.find(b => b.id === id), oc, filhos, true)).join('');
+  } else if (MODO_ARR === 'todas') {
+    const ord = [...monte].sort((a, b) => {
+      const fa = FIL[a.filamento_id] || {}, fb = FIL[b.filamento_id] || {};
+      return categoria(fa).localeCompare(categoria(fb)) || familia(fa).localeCompare(familia(fb))
+        || nomeFil(fa).localeCompare(nomeFil(fb), 'pt');
+    });
+    html = ord.map(b => peca(b, oc, filhos)).join('');
+  } else {
+    const chave = MODO_ARR === 'cor' ? familia : categoria;
+    const ordem = (MODO_ARR === 'cor' ? FAMILIAS : CATEGORIAS).map(x => x[0]);
+    const grupos = {};
+    for (const b of monte) (grupos[chave(FIL[b.filamento_id] || {})] ||= []).push(b);
+    html = ordem.filter(k => grupos[k]).map(k => {
+      const bs = grupos[k], sug = sugereVarias(bs);
+      const destinos = [...new Set(sug.map(m => m.local_id))];
+      return `<div class="arrgrupo"><div class="arrgcab">${MODO_ARR === 'cor' ? swatchFam(k) : ''}
+        <b>${esc(MODO_ARR === 'cor' ? NOME_FAM[k] : NOME_CAT[k])}</b><span class="via">${bs.length}</span>
+        ${sug.length ? `<button class="ghost sug" data-grupo="${k}" title="${esc(destinos.map(ondeNome).join(', '))}">→ ${
+          destinos.length === 1 ? esc(ondeNome(destinos[0])) : `${sug.length} para ${destinos.length} sítios`}</button>` : ''}
+        </div>${bs.map(b => peca(b, oc, filhos)).join('')}</div>`;
+    }).join('');
+  }
+  $('#arrLista').innerHTML = html;
+}
+
+/* ---------- contentores ---------- */
+function editorRegras(l) {
+  const r = regrasDe(l);
+  const tem = (k, v) => (r[k] || []).includes(v);
+  const mats = [...new Set([...INV.filamentos.filter(f => vivas(f).length).map(materialBase).filter(Boolean),
+                             ...(r.mat || [])])].sort();
+  const herda = !temRegras(r) && regrasEfectivas(l.id).de;
+  return `<div class="conted" data-ed="${l.id}">
+    ${herda ? `<div class="sub">Agora herda de <b>${esc(herda.nome)}</b>: ${esc(resumoRegras(regrasDe(herda)))}.
+      Escolher aqui substitui.</div>` : ''}
+    <h3>Tipo</h3><div class="chips">${CATEGORIAS.map(([k, n, d]) =>
+      `<span class="chip${tem('cat', k) ? ' on' : ''}" data-rk="cat" data-rv="${k}" title="${esc(d)}">${n}</span>`).join('')}</div>
+    <h3>Materiais</h3><div class="chips">${mats.map(m =>
+      `<span class="chip${tem('mat', m) ? ' on' : ''}" data-rk="mat" data-rv="${esc(m)}">${esc(m)}</span>`).join('')}</div>
+    <h3>Cores</h3><div class="chips">${FAMILIAS.map(([k, n]) =>
+      `<span class="chip comicone${tem('cor', k) ? ' on' : ''}" data-rk="cor" data-rv="${k}">${swatchFam(k)}${n}</span>`).join('')}</div>
+    <h3>Estado</h3><div class="chips">${['selado', 'aberto'].map(e =>
+      `<span class="chip${tem('estado', e) ? ' on' : ''}" data-rk="estado" data-rv="${e}">${e}s</span>`).join('')}</div>
+    <div class="row" style="margin-top:10px">
+      <label class="sub" style="margin:0">cabem</label>
+      <input type="number" min="0" value="${+l.capacidade || 0}" data-ccap="${l.id}" style="width:80px"
+             title="0 = sem limite">
+      <button class="ghost" data-limpa="${l.id}"${temRegras(r) ? '' : ' disabled'}>limpar regras</button>
+      <button class="primary" data-cr="${l.id}" style="margin-left:auto">feito</button>
+    </div>
+    <div class="sub" style="margin-top:6px">Sem nada escolhido aceita tudo. Aceita o <b>tipo</b> ou o
+      <b>material</b> escolhido; cores e estado, quando escolhidos, restringem.</div>
+  </div>`;
+}
+function cartaoCont(l, oc, rotulo) {
+  const cap = +l.capacidade || 0, n = oc.n[l.id] || 0;
+  const {r, de} = regrasEfectivas(l.id);
+  const bs = (oc.em[l.id] || []).slice().sort((a, b) => a.filamento_id - b.filamento_id);
+  const aqui = de && de.id === l.id;
+  return `<div class="cont${cap && n >= cap ? ' cheio' : ''}${CONT_ABERTO === l.id ? ' aberto' : ''}" data-drop="${l.id}">
+    <div class="conttopo">
+      ${rotulo ? `<span class="contnome rot">${esc(rotulo)}</span>`
+        : `<input class="contnome" value="${esc(l.nome)}" data-cn="${l.id}" title="muda o nome">`}
+      <span class="pill${cap && n >= cap ? ' bad' : ''}">${n}${cap ? ' / ' + cap : ''}</span>
+      ${rotulo ? '' : `<button class="ghost" data-cr="${l.id}" title="o que aceita">⚙</button>
+      <button class="ghost danger" data-cx="${l.id}" title="apagar o contentor">✕</button>`}
+    </div>
+    <div class="contregras">${temRegras(r) ? `${aqui ? '' : '<span title="herdado">↳ </span>'}${esc(resumoRegras(r))}`
+      : (l.tipo === 'impressora' ? 'impressora — só o que lá puseres' : 'aceita tudo')}</div>
+    <div class="contbobs">${bs.map(b => {
+      const f = FIL[b.filamento_id] || {};
+      return `<span class="mini${SEL === b.id ? ' sel' : ''}" data-bob="${b.id}" title="${esc(nomeFil(f))} · ${Math.round(+b.restante_g || 0)} g">${
+        bobinaSVG(corDoFil(f), 30, eTransparente(f.cor))}<i>${esc(materialBase(f))}</i></span>`;
+    }).join('') || '<span class="sub">vazio — arrasta para aqui</span>'}</div>
+    ${CONT_ABERTO === l.id && !rotulo ? editorRegras(l) : ''}
+  </div>`;
+}
+const MODELOS = [
+  ['Vazio', {}], ['PLA normais', {cat: ['pla']}], ['PLA especiais', {cat: ['pla_esp']}],
+  ['PETG', {cat: ['petg']}], ['Engenharia', {cat: ['eng']}],
+  ['Pretos e brancos', {cor: ['preto', 'branco']}], ['Seladas (reserva)', {estado: ['selado']}],
+];
+/* Os contentores de antes da última mudança que ainda não voltaram a existir.
+   Quem não tinha regras fica com as que se deduzem do que lá estava: o
+   "Lack A - PETGs" guardava PETG, por isso volta a aceitar PETG. Só se deduz
+   quando dá no máximo dois tipos -- mais do que isso era uma gaveta de tudo. */
+function historico() {
+  const m = INV.mudanca; if (!m) return [];
+  const existe = new Set(INV.locais.map(l => l.nome));
+  return (m.locais || []).filter(x => x.tipo !== 'impressora').map(x => {
+    const nome = x.nome.split(' › ').pop();
+    let aceita = regrasDe(x), deduzida = false;
+    if (!temRegras(aceita)) {
+      const cats = new Set(INV.bobines.filter(b => m.antes[String(b.id)] === x.nome && FIL[b.filamento_id])
+        .map(b => categoria(FIL[b.filamento_id])));
+      if (cats.size && cats.size <= 2) { aceita = {cat: [...cats]}; deduzida = true; }
+    }
+    return {nome, aceita, deduzida, capacidade: x.capacidade};
+  }).filter(x => !existe.has(x.nome));
+}
+function tileNovo(pai) {
+  if (NOVO_ABERTO !== pai) return `<button class="cont novo" data-novo="${pai}" title="novo contentor${pai ? ' aqui dentro' : ''}">+</button>`;
+  const hist = historico();
+  return `<div class="cont novo aberto"><div class="sub" style="margin-bottom:6px">Novo contentor:</div>
+    <div class="chips">${MODELOS.map(([n], i) => `<span class="chip" data-modelo="${i}">${n}</span>`).join('')}
+      ${pai === 0 ? '<span class="chip" data-estante="1" title="uma estante com prateleiras lá dentro">Estante com prateleiras…</span>' : ''}</div>
+    ${hist.length ? `<div class="sub" style="margin:8px 0 4px">Do histórico (antes da mudança):</div><div class="chips">${
+      hist.map((x, i) => `<span class="chip" data-hist="${i}" title="${esc(resumoRegras(x.aceita) || 'aceita tudo')}${
+        x.deduzida ? ' (pelo que lá estava)' : ''}">${esc(x.nome)}</span>`).join('')}</div>` : ''}
+    <div class="row" style="margin-top:8px"><button class="ghost" data-novo="">cancelar</button></div></div>`;
+}
+function secao(l, filhos, oc, nivel) {
+  const meus = filhos[l.id] || [];
+  const folhas = meus.filter(x => !(filhos[x.id] || []).length);
+  const ramos = meus.filter(x => (filhos[x.id] || []).length);
+  const sub = new Set(), pilha = [l.id];
+  while (pilha.length) for (const x of (filhos[pilha.pop()] || [])) { sub.add(x.id); pilha.push(x.id); }
+  const total = [l.id, ...sub].reduce((a, id) => a + (oc.n[id] || 0), 0);
+  const r = regrasDe(l), cap = +l.capacidade || 0;
+  return `<div class="arrsec n${Math.min(nivel, 2)}">
+    <div class="arrseccab">
+      <input class="contnome" value="${esc(l.nome)}" data-cn="${l.id}" title="muda o nome">
+      <span class="pill">${total}${cap ? ' / ' + cap : ''}</span>
+      ${temRegras(r) ? `<span class="via">${esc(resumoRegras(r))}</span>` : ''}
+      <button class="ghost" data-cr="${l.id}" title="o que aceita (as prateleiras herdam)">⚙</button>
+      <button class="ghost danger" data-cx="${l.id}" title="apagar">✕</button>
+    </div>
+    ${CONT_ABERTO === l.id ? editorRegras(l) : ''}
+    <div class="conts">${(oc.n[l.id] ? cartaoCont(l, oc, 'solto em ' + l.nome) : '')
+      + folhas.map(x => cartaoCont(x, oc)).join('') + tileNovo(l.id)}</div>
+    ${ramos.map(x => secao(x, filhos, oc, nivel + 1)).join('')}
+  </div>`;
+}
+function desenhaConts() {
+  const filhos = arvoreLocais(), oc = ocupacao();
+  const raizes = filhos[0] || [];
+  const comFilhos = raizes.filter(l => (filhos[l.id] || []).length);
+  const soltos = raizes.filter(l => !(filhos[l.id] || []).length);
+  $('#arrConts').innerHTML = comFilhos.map(l => secao(l, filhos, oc, 0)).join('')
+    + `<div class="arrsec"><div class="arrseccab"><b>${comFilhos.length ? 'Avulsos' : 'Contentores'}</b>
+        <span class="sub">o + aqui cria um sítio novo de raiz (uma estante, uma divisão, uma caixa)</span></div>
+      <div class="conts">${soltos.map(l => cartaoCont(l, oc)).join('') + tileNovo(0)}</div></div>`;
+}
+
+function desenhaArrumar() {
+  if (!$('#tab-arrumar')) return;
+  desenhaMonte(); desenhaConts();
+  const m = INV.mudanca;
+  $('#arrMudUlt').innerHTML = m ? `Última mudança: ${new Date(m.em * 1000).toLocaleString('pt-PT')} ·
+    <button class="ghost danger" id="arrMudAnular">anular essa mudança</button>` : '';
+  $('#arrMud').hidden = !MUD_ABERTA;
+}
+
+/* ---------- acções ---------- */
+async function guardaLocal(id, corpo) {
+  try { await api('/api/locais/' + id, {method: 'PATCH', body: JSON.stringify(corpo)}); }
+  catch (e) { toast(e.message, 4000); }
+  await carrega();
+}
+async function criaLocal(corpo) {
+  const r = await api('/api/locais', {method: 'POST', body: JSON.stringify(corpo)});
+  return r.id;
+}
+async function novoDeModelo(pai, nome, aceita, cap) {
+  const irmaos = INV.locais.filter(l => (l.pai_id || 0) === pai).length;
+  const tipo = pai ? 'prateleira' : 'estante';
+  const id = await criaLocal({nome: nome || `${capitaliza(tipo)} ${irmaos + 1}`, pai_id: pai || null,
+                              tipo, capacidade: cap || 0, aceita: aceita || {}});
+  NOVO_ABERTO = null; CONT_ABERTO = id;
+  await carrega();
+  const i = document.querySelector(`#arrConts [data-cn="${id}"]`);
+  if (i) { i.focus(); i.select(); }
+}
+
+const tabArr = () => $('#tab-arrumar');
+document.addEventListener('click', async e => {
+  if (!e.target.closest('#tab-arrumar')) return;
+  if (ARRASTOU) { ARRASTOU = false; return; }
+  const t = e.target;
+  const q = s => t.closest(s);
+  let el;
+  if ((el = q('[data-modo]'))) { MODO_ARR = el.dataset.modo; PREF.poe('arr.modo', MODO_ARR); return desenhaMonte(); }
+  if (q('#arrOutra')) { RONDA = []; return desenhaMonte(); }
+  if ((el = q('[data-poe]'))) return move([{bobine_id: +el.dataset.poe, local_id: +el.dataset.para}],
+                                          'arrumada em ' + ondeNome(+el.dataset.para));
+  if ((el = q('[data-grupo]'))) {
+    const chave = MODO_ARR === 'cor' ? familia : categoria;
+    const bs = monteVisivel().filter(b => chave(FIL[b.filamento_id] || {}) === el.dataset.grupo);
+    const movs = sugereVarias(bs);
+    return move(movs, `${movs.length} arrumada(s)`);
+  }
+  if (q('#arrTudo')) {
+    const movs = sugereVarias(monteVisivel());
+    const destinos = [...new Set(movs.map(m => m.local_id))].map(ondeNome);
+    if (!confirm(`Pôr ${movs.length} bobine(s) no sítio sugerido?\n\n${destinos.join(', ')}\n\nDá para desfazer.`)) return;
+    return move(movs, `${movs.length} arrumada(s)`);
+  }
+  if (q('#arrDesf')) {
+    const antes = DESFAZER.pop(); if (!antes) return;
+    try { await api('/api/arrumar', {method: 'POST', body: JSON.stringify({movimentos: antes})}); }
+    catch (err) { toast(err.message, 4000); }
+    await carrega(); return toast('desfeito');
+  }
+  if (q('#arrMudBtn')) { MUD_ABERTA = !MUD_ABERTA; return desenhaArrumar(); }
+  if (q('#arrMudCancel')) { MUD_ABERTA = false; return desenhaArrumar(); }
+  if (q('#arrMudGo')) {
+    const apagar = $('#arrMudApagar').checked;
+    if (!confirm('Todas as bobines voltam ao monte "por arrumar"'
+      + ($('#arrMudImp').checked ? ' (menos as que estão nas impressoras)' : '')
+      + (apagar ? ' e os contentores antigos são apagados' : '')
+      + '.\n\nOnde cada uma estava fica guardado, e a mudança anula-se de uma vez se for preciso.')) return;
+    const r = await api('/api/mudanca', {method: 'POST', body: JSON.stringify({
+      manter_impressoras: $('#arrMudImp').checked, apagar_locais: apagar})});
+    MUD_ABERTA = false; DESFAZER.length = 0; RONDA = [];
+    await carrega(); listaPlanos();
+    return toast(`${r.soltas} bobine(s) no monte${r.apagados ? ` · ${r.apagados} contentor(es) apagado(s)` : ''}`, 4000);
+  }
+  if (q('#arrMudAnular')) {
+    if (!confirm('Anular a última mudança? As bobines voltam aos sítios de antes e os contentores apagados'
+      + ' voltam. Os contentores novos ficam, vazios.')) return;
+    const r = await api('/api/agente/anular', {method: 'POST', body: JSON.stringify({plano_id: INV.mudanca.id})});
+    if (r.erro) return toast(r.erro);
+    DESFAZER.length = 0;
+    await carrega(); listaPlanos(); return toast('mudança anulada');
+  }
+  if ((el = q('[data-cr]'))) { CONT_ABERTO = CONT_ABERTO === +el.dataset.cr ? 0 : +el.dataset.cr; return desenhaConts(); }
+  if ((el = q('[data-limpa]'))) return guardaLocal(+el.dataset.limpa, {aceita: {}});
+  if ((el = q('[data-rk]'))) {
+    const id = +q('[data-ed]').dataset.ed, r = regrasDe(LOC[id]);
+    const k = el.dataset.rk, v = el.dataset.rv, lista = new Set(r[k] || []);
+    lista.has(v) ? lista.delete(v) : lista.add(v);
+    r[k] = [...lista];
+    return guardaLocal(id, {aceita: r});
+  }
+  if ((el = q('[data-cx]'))) {
+    const l = LOC[+el.dataset.cx], oc = ocupacao();
+    const n = oc.n[l.id] || 0, sub = INV.locais.filter(x => x.pai_id === l.id).length;
+    if (!confirm(`Apagar "${l.nome}"?` + (n ? `\n\nAs ${n} bobine(s) que lá estão voltam ao monte.` : '')
+      + (sub ? `\nOs ${sub} contentor(es) lá dentro passam a avulsos.` : ''))) return;
+    await api('/api/locais/' + l.id, {method: 'DELETE'});
+    if (CONT_ABERTO === l.id) CONT_ABERTO = 0;
+    await carrega(); return toast('contentor apagado');
+  }
+  if ((el = q('[data-novo]'))) { NOVO_ABERTO = el.dataset.novo === '' ? null : +el.dataset.novo; return desenhaConts(); }
+  if ((el = q('[data-modelo]'))) {
+    const [n, a] = MODELOS[+el.dataset.modelo];
+    return novoDeModelo(NOVO_ABERTO, n === 'Vazio' ? '' : n, a);
+  }
+  if ((el = q('[data-hist]'))) {
+    const x = historico()[+el.dataset.hist];
+    return novoDeModelo(NOVO_ABERTO, x.nome, x.aceita, x.capacidade);
+  }
+  if (q('[data-estante]')) {
+    const n = parseInt(prompt('Quantas prateleiras tem a estante?', '4'), 10);
+    if (!(n > 0 && n <= 30)) return;
+    const estantes = INV.locais.filter(l => l.tipo === 'estante').length;
+    const eid = await criaLocal({nome: `Estante ${estantes + 1}`, tipo: 'estante'});
+    for (let i = 1; i <= n; i++) await criaLocal({nome: `Prateleira ${i}`, pai_id: eid, tipo: 'prateleira'});
+    NOVO_ABERTO = null; CONT_ABERTO = eid;
+    await carrega(); return toast('estante criada — dá-lhe nome e regras no ⚙');
+  }
+  if (q('input,button,select,label')) return;
+  // tocar numa bobine escolhe-a; tocar num contentor (ou no monte) põe-na lá
+  if ((el = q('[data-bob]'))) { SEL = SEL === +el.dataset.bob ? 0 : +el.dataset.bob; return desenhaArrumar(); }
+  if (SEL && (el = q('[data-drop]'))) {
+    const para = +el.dataset.drop || null;
+    if ((INV.bobines.find(b => b.id === SEL)?.local_id || null) === para) { SEL = 0; return desenhaArrumar(); }
+    return move([{bobine_id: SEL, local_id: para}], para ? 'arrumada em ' + ondeNome(para) : 'de volta ao monte');
+  }
+});
+document.addEventListener('change', e => {
+  const el = e.target;
+  if (!el.closest('#tab-arrumar')) return;
+  if (el.dataset.cn) {
+    if (!el.value.trim()) { el.value = LOC[+el.dataset.cn]?.nome || ''; return; }
+    return guardaLocal(+el.dataset.cn, {nome: el.value.trim()});
+  }
+  if (el.dataset.ccap) return guardaLocal(+el.dataset.ccap, {capacidade: Math.max(0, +el.value || 0)});
+});
+document.addEventListener('keydown', e => {
+  if (!tabArr()?.classList.contains('active')) return;
+  if (e.key === 'Enter' && e.target.dataset?.cn) e.target.blur();
+  if (e.key === 'Escape' && (SEL || CONT_ABERTO || NOVO_ABERTO !== null)) {
+    SEL = 0; CONT_ABERTO = 0; NOVO_ABERTO = null; desenhaArrumar();
+  }
+});
+
+/* ---------- arrastar ----------
+   Pointer events e não o drag-and-drop do HTML: esse não existe no toque, e o
+   tablet é metade da razão desta aba. Com o rato arrasta-se logo; com o dedo é
+   preciso segurar um instante, senão não se conseguia rolar a lista. */
+let ARRASTOU = false, ARRASTO = null;
+document.addEventListener('touchmove', e => { if (ARRASTO?.fantasma) e.preventDefault(); }, {passive: false});
+document.addEventListener('contextmenu', e => { if (e.target.closest('#tab-arrumar [data-bob]')) e.preventDefault(); });
+/* com o rato, a foto da bobine começava o arrasto NATIVO de imagem, que manda
+   pointercancel ao primeiro movimento -- e o arrasto nosso morria ali */
+document.addEventListener('dragstart', e => { if (e.target.closest?.('#tab-arrumar')) e.preventDefault(); });
+document.addEventListener('pointerdown', e => {
+  const el = e.target.closest('#tab-arrumar [data-bob]');
+  if (!el || e.button > 0 || e.target.closest('button,input,select')) return;
+  const toque = e.pointerType !== 'mouse';
+  const a = ARRASTO = {el, id: +el.dataset.bob, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY,
+                       toque, fantasma: null, alvo: null, timer: 0};
+  if (toque) a.timer = setTimeout(() => comecaArrasto(a), 280);
+});
+function comecaArrasto(a) {
+  if (ARRASTO !== a) return;
+  const r = a.el.getBoundingClientRect();
+  a.dx = a.x0 - r.left; a.dy = a.y0 - r.top;
+  a.fantasma = a.el.cloneNode(true);
+  a.fantasma.classList.add('fantasma');
+  a.fantasma.style.width = r.width + 'px';
+  document.body.append(a.fantasma);
+  a.el.classList.add('aarrastar');
+  document.body.classList.add('a-arrastar');
+  // os contentores que aceitam ficam marcados; o sugerido, mais ainda
+  const b = INV.bobines.find(x => x.id === a.id), oc = ocupacao(), filhos = arvoreLocais();
+  const melhor = b && sugere(b, oc, filhos);
+  $$('#tab-arrumar .cont[data-drop]').forEach(c => {
+    const l = LOC[+c.dataset.drop]; if (!l || !b) return;
+    c.classList.toggle('aceita', pontua(b, l, oc) > 0);
+    c.classList.toggle('melhor', melhor && melhor.id === l.id);
+  });
+  navigator.vibrate?.(12);
+  posiciona(a);
+}
+function posiciona(a) {
+  a.fantasma.style.transform = `translate(${a.x - a.dx}px,${a.y - a.dy}px) rotate(-1.5deg)`;
+  const z = document.elementFromPoint(a.x, a.y)?.closest('#tab-arrumar [data-drop]') || null;
+  if (z !== a.alvo) { a.alvo?.classList.remove('sobre'); a.alvo = z; z?.classList.add('sobre'); }
+}
+let _rolar = 0;
+document.addEventListener('pointermove', e => {
+  const a = ARRASTO; if (!a) return;
+  a.x = e.clientX; a.y = e.clientY;
+  if (!a.fantasma) {
+    if (Math.hypot(a.x - a.x0, a.y - a.y0) < (a.toque ? 10 : 5)) return;
+    if (a.toque) { clearTimeout(a.timer); ARRASTO = null; return; }   // era para rolar
+    comecaArrasto(a);
+  }
+  posiciona(a);
+  // junto às bordas a página rola sozinha, para chegar aos contentores de baixo
+  const borda = 70, h = innerHeight;
+  const v = a.y < borda ? -(borda - a.y) / 3 : a.y > h - borda - 70 ? (a.y - (h - borda - 70)) / 3 : 0;
+  cancelAnimationFrame(_rolar);
+  if (v) { const passo = () => { if (ARRASTO !== a) return; scrollBy(0, v); posiciona(a);
+                                 _rolar = requestAnimationFrame(passo); }; _rolar = requestAnimationFrame(passo); }
+});
+function acabaArrasto(e, cancelado) {
+  const a = ARRASTO; if (!a) return;
+  ARRASTO = null; clearTimeout(a.timer); cancelAnimationFrame(_rolar);
+  if (!a.fantasma) return;
+  ARRASTOU = true; setTimeout(() => { ARRASTOU = false; }, 50);
+  a.fantasma.remove(); a.el.classList.remove('aarrastar');
+  document.body.classList.remove('a-arrastar');
+  $$('#tab-arrumar .sobre,#tab-arrumar .aceita,#tab-arrumar .melhor')
+    .forEach(c => c.classList.remove('sobre', 'aceita', 'melhor'));
+  if (cancelado || !a.alvo) return;
+  const para = +a.alvo.dataset.drop || null;
+  const b = INV.bobines.find(x => x.id === a.id);
+  if (!b || (b.local_id || null) === para) return;
+  // as regras orientam, não prendem: larga-se onde se quiser, mas avisa-se
+  const fora = para && pontua(b, LOC[para], ocupacao()) < 0;
+  move([{bobine_id: a.id, local_id: para}], para ? 'arrumada em ' + ondeNome(para)
+    + (fora ? ' — fora das regras dele (ou já cheio)' : '') : 'de volta ao monte');
+}
+$('#arrQ').addEventListener('input', desenhaMonte);
+document.addEventListener('pointerup', e => acabaArrasto(e, false));
+document.addEventListener('pointercancel', e => acabaArrasto(e, true));
+</script>
+<script>
 /* ============================ agente ============================ */
 let PLANO = null;
 function desenhaPlano(pid, p) {
@@ -2322,6 +3034,7 @@ async function carrega() {
   $('#mLoja').innerHTML = opcoesLoja('');
   mLojaLe = ligaLoja(document, '#mLoja', '#mLojaTxt', '');
   desenhaLista(); desenhaChips(); desenhaPrecos(); desenhaLocais(); desenhaLojas();
+  desenhaArrumar();
 }
 
 async function entrar(registar) {
