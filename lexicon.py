@@ -89,6 +89,14 @@ MARCAS: dict[str, list[str]] = {
     # "hyper" sozinho saiu: há "PETG Hyper Speed" de meia dúzia de marcas
     "creality": ["creality", "creality hyper", "ender filament", "cr pla"],
     "anycubic": ["anycubic"],
+    # resinas
+    "phrozen": ["phrozen", "phrozen aqua"],
+    "siraya": ["siraya", "siraya tech", "sirayatech"],
+    "jamghe": ["jamghe", "jamg he"],
+    "formlabs": ["formlabs"],
+    "liqcreate": ["liqcreate"],
+    "nova3d": ["nova3d", "nova 3d"],
+    "monocure": ["monocure", "monocure 3d", "monocure3d"],
     "extrudr": ["extrudr", "greentec", "greentec pro", "xpetg", "durapro"],
     "fillamentum": ["fillamentum", "extrafill", "timberfill", "vinyl"],
     "3djake": ["3djake", "3d jake", "jake", "nicefilaments"],
@@ -170,6 +178,9 @@ MARCAS: dict[str, list[str]] = {
 # Para MOSTRAR não servem: ninguém escreve "azurefilm" nem "bambulab". Esta tabela
 # é a forma como cada marca escreve o seu próprio nome.
 MARCAS_NOME: dict[str, str] = {
+    "phrozen": "Phrozen", "siraya": "Siraya Tech", "jamghe": "JAMG HE",
+    "formlabs": "Formlabs", "liqcreate": "Liqcreate", "nova3d": "NOVA3D",
+    "monocure": "Monocure 3D",
     "azurefilm": "AzureFilm", "esun": "eSUN", "sunlu": "SUNLU",
     "polymaker": "Polymaker", "prusa": "Prusament", "bambulab": "Bambu Lab",
     "spectrum": "Spectrum", "elegoo": "ELEGOO", "qidi": "QIDI",
@@ -218,7 +229,9 @@ MATERIAIS: dict[str, list[str]] = {
     "hips": ["hips", "hi ps"],
     "pp": ["pp", "polipropileno", "polypropylene"],
     "peek": ["peek", "pei", "ultem", "pps", "psu", "peki"],
-    "resina": ["resina", "resin", "standard resin", "abs like", "water washable"],
+    "resina": ["resina", "resin", "resins", "resinas", "harz", "photopolymer", "fotopolimero",
+               "uv resin", "lcd resin", "resina uv", "standard resin", "abs like", "abs-like",
+               "water washable", "water-washable", "lavavel", "plant based", "plant-based"],
     "compositos": ["wood", "madeira", "woodfill", "cork", "cortica", "corkfill", "metal fill",
                    "bronzefill", "marble", "marmore", "ceramic", "ceramica", "glow", "gitd",
                    "glow in the dark", "fosforescente", "brilha no escuro"],
@@ -473,6 +486,37 @@ def e_transparente(texto: str) -> bool:
     return bool(_TRANSPARENTE.search(norm(texto or "")))
 
 
+# ---------------------------------------------------------------- resinas --
+# Um material é resina quando o NOME o diz -- não há coluna à parte: o que se
+# escreve no campo material (ou o que a loja põe no título) é que manda, tal e
+# qual como para o resto. O padrão vai para o browser em /api/lexicon, e é o
+# mesmo que decide aqui (ponte do Fatia, pesquisa nas lojas).
+RESINA_RE = (r"(?<![a-z])(resin|resina|harz|photopolymer|fotopolimer)"
+             r"|abs.?like|water.?washable|lavavel a agua")
+_RESINA = re.compile(RESINA_RE)
+
+
+def e_resina(texto: str) -> bool:
+    return bool(_RESINA.search(norm(texto or "")))
+
+
+# Subtipos, por ordem de prioridade: "ABS-like Tough" é ABS-like. O terceiro
+# campo é a família usada para arrumar: normais, ABS-like e técnicas.
+TIPOS_RESINA: list[tuple[str, str, str]] = [
+    (r"abs.?like", "ABS-like", "res_abs"),
+    (r"(?<![a-z])(tough|resistente|impact)", "Tough", "res_tec"),
+    (r"flex|elastic|rubber|borracha|tpu.?like", "Flexível", "res_tec"),
+    (r"high.?temp|heat|alta temp", "Alta temperatura", "res_tec"),
+    (r"engineering|engenharia|(nylon|pp|pa|pc).?like", "Engenharia", "res_tec"),
+    (r"castable|fundi|jewel|joalh|wax", "Fundição", "res_tec"),
+    (r"dental|dentes", "Dental", "res_tec"),
+    (r"water.?wash|lavavel", "Lavável a água", "res"),
+    (r"plant|(?<![a-z])(soy|soja|eco|bio)(?![a-z])", "Plant-based", "res"),
+    (r"(?<![a-z0-9])(8k|12k|14k|16k)(?![a-z])", "8K", "res"),
+    (r"standard|(?<![a-z])(normal|basic|padrao)(?![a-z])", "Standard", "res"),
+]
+
+
 # ------------------------------------------------ cor a partir do nome (hex) --
 # O MESMO algoritmo que o browser corre em corDe(): é ele que pinta a bobine
 # desenhada. Existe aqui em Python porque a ponte para o Fatia tem de mandar a
@@ -623,6 +667,8 @@ def payload() -> dict:
         "hex": {norm(k): v for k, v in CORES_HEX.items()},
         "marcas_nome": MARCAS_NOME,
         "modif": {norm(k): v for k, v in MODIF_COR.items()},
+        "resina_re": RESINA_RE,
+        "tipos_resina": TIPOS_RESINA,
     }
 
 

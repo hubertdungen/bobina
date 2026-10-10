@@ -149,6 +149,17 @@ bobine mostra "antes: …", o **+** oferece os contentores antigos com as regras
 deduzidas do que lá estava, e a mudança inteira anula-se de uma vez (os
 contentores apagados voltam com o mesmo id).
 
+**Resinas.** Um material é resina quando o nome o diz ("Resina ABS-like", "Water-Washable
+Resin"…): a regra está uma vez só no `lexicon.py` (`RESINA_RE`) e vai para o browser com o
+resto do léxico. Desenha-se um **frasco** em vez da bobine, com o líquido na cor da resina e
+à altura do que ainda resta. Ao adicionar de uma loja, o material sai com o subtipo
+("Resina ABS-like", "Resina 8K", "Resina Flexível"…) e a arrumação conhece três famílias:
+resinas normais (standard, lavável a água, plant-based, 8K), ABS-like e técnicas (tough,
+flexível, alta temperatura, fundição, dental, engenharia). Nas lojas, as resinas só aparecem
+quando se procura resina — uma busca por "ABS" não se enche de "ABS-like Resin" — e o peso
+lê também volumes ("500ml" ≈ 550 g, pela densidade típica de 1,1 g/ml). A ponte do Fatia
+diz `tipo: "resina"` ou `"filamento"` em cada material.
+
 **Ponte para o Fatia.** O [Fatia](https://github.com/hubertdungen/fatia) escolhe os
 filamentos daqui **em direto**, sem importar nada: `/api/fatia/filamentos` devolve, por
 filamento, o custo real por quilo (do que foi mesmo pago), o melhor preço visto nas lojas,

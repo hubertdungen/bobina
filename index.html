@@ -772,9 +772,32 @@ function bobinaSVG(cor, tam, transp) {
    cantos redondos -- o mesmo recorte das fotos das lojas. Desenhar uma caixa de
    cartão a sério era ruído: quem quiser a palavra tem o indicador "na caixa"
    logo por baixo. */
-function caixaSVG(cor, tam, transp, tracejado) {
+/* Resina: um frasco em vez da bobine. A regra de "é resina" vem do léxico
+   (/api/lexicon) e é a mesma que o servidor usa -- o nome do material é que
+   manda, não há coluna à parte. O líquido sobe até onde ainda há resina. */
+let _reResina = null;
+const eResinaTxt = txt => (_reResina ||= new RegExp(LEX.resina_re || '(?!)')).test(norm(txt || ''));
+const eResina = f => eResinaTxt(f.material);
+function frascoSVG(cor, tam, transp, nivel = 1) {
+  const c = cor || NEUTRA, linha = visivel(c);
+  const n = Math.max(0, Math.min(1, isFinite(nivel) ? nivel : 1));
+  const topo = (42.6 - 19 * n).toFixed(1);       // o líquido vai de y=42,6 até y=23,6
+  return `<svg class="bob" viewBox="0 0 48 48" width="${tam}" height="${tam}" aria-hidden="true">
+    ${n > 0.02 ? `<path d="M14.2 ${topo}H33.8V40a2.6 2.6 0 0 1-2.6 2.6H16.8a2.6 2.6 0 0 1-2.6-2.6Z"
+          fill="${c}" opacity="${transp ? '.45' : '.92'}"/>` : ''}
+    <path d="M19.5 10.5V13C14.5 14 12 17 12 21V40a4.5 4.5 0 0 0 4.5 4.5h15A4.5 4.5 0 0 0 36 40V21
+             c0-4-2.5-7-7.5-8v-2.5" fill="none" stroke="${linha}" stroke-width="1.8"
+          stroke-linejoin="round" opacity=".8"/>
+    <rect x="17" y="3.5" width="14" height="7" rx="1.8" fill="none" stroke="${linha}" stroke-width="1.8"/>
+    <path d="M16.6 25v11" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity=".28"/>
+  </svg>`;
+}
+/* o desenho certo para o material: frasco para resina, bobine para o resto */
+const desenhoSVG = (cor, tam, transp, material, nivel) => eResinaTxt(material)
+  ? frascoSVG(cor, tam, transp, nivel) : bobinaSVG(cor, tam, transp);
+function caixaSVG(cor, tam, transp, tracejado, dentroSVG) {
   const linha = visivel(cor || NEUTRA);
-  const dentro = bobinaSVG(cor, tam, transp)
+  const dentro = (dentroSVG || bobinaSVG(cor, tam, transp))
     .replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
   // tracejado = umas bobines têm caixa e outras não; a moldura fica meio posta
   const traco = tracejado ? ' stroke-dasharray="5 4.5" stroke-linecap="round"' : '';
@@ -847,6 +870,8 @@ function corBarra(fracao) {
    PLA. É o canónico do léxico -- o mesmo que faz a pesquisa por "pla" achar os
    PLA+ -- e é o que se quer numa etiqueta de relance. */
 function materialBase(f) {
+  // "ABS-like Resin" não é ABS: a resina ganha a qualquer outro material no nome
+  if (eResina(f)) return 'RESINA';
   const c = escolheFaceta(achaFacetas(f.material || '').material);
   if (c) return c.toUpperCase();
   /* "HT-PLA" não está no léxico inteiro, e ficar-se pelo primeiro pedaço dava
@@ -866,11 +891,15 @@ const fotoURL = u => '/api/imagem?u=' + encodeURIComponent(u);
    que é rolo inteiro e o que é amostra. Só o desenho -- a foto é da loja. */
 const tamBob = (f, tam) => (+f.peso_g > 0 && +f.peso_g <= 500) ? Math.round(tam * 0.78) : tam;
 function media(f, tam, bs) {
-  const est = estadoCaixa(bs || vivas(f));
+  const bsx = bs || vivas(f);
+  const est = estadoCaixa(bsx);
   const td = tamBob(f, tam);
-  let desenho = est === 'nenhuma'
-    ? bobinaSVG(corDoFil(f), td, transpDoFil(f))
-    : caixaSVG(corDoFil(f), td, transpDoFil(f), est === 'algumas');
+  // só o frasco usa o nível: quanto resta de tudo o que se comprou
+  const tot = bsx.reduce((a, b) => a + (+b.peso_liquido_g || 0), 0);
+  const res = bsx.reduce((a, b) => a + (b.estado === 'vazio' ? 0 : (+b.restante_g || 0)), 0);
+  const dentro = desenhoSVG(corDoFil(f), td, transpDoFil(f), f.material, tot ? res / tot : 1);
+  let desenho = est === 'nenhuma' ? dentro
+    : caixaSVG(corDoFil(f), td, transpDoFil(f), est === 'algumas', dentro);
   // a caixa à volta fica do tamanho de sempre, para os cartões não desalinharem
   if (td < tam) desenho = `<span style="display:flex;flex:none;width:${tam}px;height:${tam}px;
     align-items:center;justify-content:center">${desenho}</span>`;
@@ -1139,7 +1168,8 @@ function cartao(f, termos, bs, emLocal) {
     </div>
     <div class="qty">${vazio ? '<span class="pill">sem stock</span>'
       : `<b>${bs.length}</b><div class="sub">${fora.length
-          ? `de ${todas.length} bobines` : `bobine${bs.length === 1 ? '' : 's'}`}</div>
+          ? `de ${todas.length} ${eResina(f) ? 'frascos' : 'bobines'}`
+          : `${eResina(f) ? 'frasco' : 'bobine'}${bs.length === 1 ? '' : 's'}`}</div>
          <button class="noz${naImp ? ' on' : ''}${naImp && !VER.impIcone ? ' roxo' : ''}"
            data-noz="${f.id}" title="${esc(naImp
              ? (naImp > 1 ? naImp + ' bobines na impressora' : 'na impressora')
@@ -1418,7 +1448,7 @@ function desenhaLista() {
 }
 
 /* chips: atalhos que escrevem na caixa, para a pesquisa continuar a ser o centro */
-const CHIPS = ['PLA', 'PETG', 'ASA', 'ABS', 'TPU', 'Nylon', 'preto', 'branco', 'aberto', 'selado'];
+const CHIPS = ['PLA', 'PETG', 'ASA', 'ABS', 'TPU', 'Nylon', 'Resina', 'preto', 'branco', 'aberto', 'selado'];
 function desenhaChips() {
   const termos = termosDe($('#q').value);
   const sem = INV.filamentos.filter(f => vivas(f).length === 0).length;
@@ -1452,7 +1482,7 @@ async function abreFilamento(fid) {
   const dlg = document.createElement('dialog');
   dlg.innerHTML = `<div class="dlg">
     <h2>${esc([f.marca, f.material, f.cor].filter(Boolean).join(' ') || 'filamento')}</h2>
-    <div class="sub" style="margin-bottom:12px">${esc(f.peso_g)} g · ⌀${esc(f.diametro)} mm${f.ref ? ' · ref ' + esc(f.ref) : ''}</div>
+    <div class="sub" style="margin-bottom:12px">${esc(f.peso_g)} g ${eResina(f) ? "· resina" : "· ⌀" + esc(f.diametro) + " mm"}${f.ref ? ' · ref ' + esc(f.ref) : ''}</div>
     <div class="previa" id="fPrev"></div>
     <div class="grid c4" style="gap:8px;margin-top:10px">
       <div class="field"><label>Marca</label><input id="fMarca" value="${esc(f.marca || '')}"></div>
@@ -1541,8 +1571,9 @@ async function abreFilamento(fid) {
     const usaFoto = f.imagem && !(dlg.querySelector('#fIcone') || {}).checked;
     prevDet.innerHTML = (f.imagem ? `<img class="foto" src="${esc(fotoURL(f.imagem))}" width="46" height="46"
         alt="" style="opacity:${usaFoto ? 1 : .35}">` : '')
-      + (estCx === 'nenhuma' ? bobinaSVG(c, 46, eTransparente(nome))
-                             : caixaSVG(c, 46, eTransparente(nome), estCx === 'algumas'))
+      + (estCx === 'nenhuma' ? desenhoSVG(c, 46, eTransparente(nome), dlg.querySelector('#fMat').value)
+                             : caixaSVG(c, 46, eTransparente(nome), estCx === 'algumas',
+                                 desenhoSVG(c, 46, eTransparente(nome), dlg.querySelector('#fMat').value)))
       + `<div class="sub">${hexDet ? 'cor escolhida' : (corDe(nome) ? 'cor lida do nome' : 'sem cor reconhecida')}
          <br>${esc(c)}${f.imagem ? (usaFoto ? ' · mostra a foto' : ' · mostra o desenho') : ''}</div>`;
   };
@@ -1868,14 +1899,21 @@ function adivinha(titulo, extra) {
     if (c) marca = nomeDaMarca(c);
   }
 
+  /* Resina primeiro: "ELEGOO ABS-Like Resin" é resina ABS-like, não ABS. O nome
+     leva o subtipo ("Resina ABS-like"), que é o que a arruma e a distingue. */
+  const resTxt = eResinaTxt(titulo) ? titulo
+    : (eResinaTxt(extra.consulta) ? extra.consulta : '');
+  const resina = resTxt ? ('Resina ' + tipoResina(titulo + ' ' + (extra.consulta || '')).nome).trim() : '';
   // a frase como está escrita ganha ao canónico: "PETG Pro" > "PETG", "PLA+" > "PLA"
-  const material = materialFrase(titulo) || materialFrase(extra.consulta || '')
+  const material = resina || materialFrase(titulo) || materialFrase(extra.consulta || '')
     || (escolheFaceta(doTitulo.material) || escolheFaceta(daConsulta.material)).toUpperCase();
   /* Tira do título as palavras que já foram para o nome do material, senão um
      "PLA Silk Black" dava material "PLA Silk" E cor "Silk Black" -- o "silk"
      repetido nos dois sítios. */
   const semMaterial = material
-    ? norm(titulo).split(' ').filter(t => !norm(material).split(' ').includes(t)).join(' ')
+    ? norm(titulo).split(' ').filter(t => !norm(material).split(' ').includes(t)
+        // numa resina saem também "resin", "abs-like", "8k"… que não são cor
+        && !(resina && (eResinaTxt(t) || tipoResina(t).nome))).join(' ')
     : titulo;
 
   // o nome como a loja o escreve ganha ao canónico: "Ocean Blue" > "azul"
@@ -1944,7 +1982,7 @@ async function adicionaDeLoja(p) {
     const usaFoto = p.imagem && !desenhar;
     prev.innerHTML = (p.imagem ? `<img class="foto" src="${esc(p.imagem)}" width="46" height="46"
         alt="" style="opacity:${usaFoto ? 1 : .35}">` : '')
-      + bobinaSVG(c, 46, eTransparente(nome))
+      + desenhoSVG(c, 46, eTransparente(nome), dlg.querySelector("#xMat").value)
       + `<div class="sub">${hexEscolhido ? 'cor escolhida' : (corDe(nome) ? 'cor lida de <b>' + esc(nome) + '</b>' : 'sem cor reconhecida')}
          <br>${esc(c)}${p.imagem ? (usaFoto ? ' · fica a foto da loja' : ' · fica o desenho') : ''}</div>`;
   };
@@ -2234,13 +2272,26 @@ const CATEGORIAS = [
   ['pla_esp', 'PLA especiais', 'madeira, silk, LW/foam, glitter, metálicos, CF, HD…'],
   ['petg', 'PETG', 'PETG, PCTG, PET'],
   ['eng', 'Engenharia', 'ABS, ASA, PC, Nylon, TPU, PP…'],
+  ['res', 'Resinas normais', 'standard, lavável a água, plant-based, 8K'],
+  ['res_abs', 'Resinas ABS-like', 'ABS-like'],
+  ['res_tec', 'Resinas técnicas', 'tough, flexível, alta temperatura, fundição, dental, engenharia'],
   ['outros', 'Outros', 'o que não cai em nenhuma das outras'],
 ];
 const NOME_CAT = Object.fromEntries(CATEGORIAS.map(([k, n]) => [k, n]));
 /* procura-se no material E na cor: "Glitter Military Green" e "Azul Galaxia"
    são PLA especiais mesmo com o material escrito só "PLA" */
 const RE_ESPECIAL = /\b(wood|madeira|silk|seda|lw|foam|leve|lightweight|aero|glitter|sparkle|marble|marmore|metal|metallic|metalico|galaxy|galaxia|glow|fosforescente|rainbow|arco.?iris|multicolou?r|dual|tri|bicolou?r|camaleao|chameleon|cf|carbon|carbono|gf|hd|ht|stone|pedra|cork|cortica)\b/;
+/* O subtipo de uma resina, pela tabela do léxico (TIPOS_RESINA): o nome para
+   pôr no material e a família para arrumar. A primeira que casar ganha. */
+let _tiposRes = null;
+function tipoResina(txt) {
+  _tiposRes ||= (LEX.tipos_resina || []).map(([re, nome, cat]) => [new RegExp(re), nome, cat]);
+  const t = norm(txt || '');
+  for (const [re, nome, cat] of _tiposRes) if (re.test(t)) return {nome, cat};
+  return {nome: '', cat: 'res'};
+}
 function categoria(f) {
+  if (eResina(f)) return tipoResina((f.material || '') + ' ' + (f.cor || '')).cat;
   const base = norm(materialBase(f)), txt = norm((f.material || '') + ' ' + (f.cor || ''));
   if (/^(pla|pha)/.test(base)) return RE_ESPECIAL.test(txt) ? 'pla_esp' : 'pla';
   if (/^(petg|pctg|pet)/.test(base)) return 'petg';
@@ -2531,7 +2582,7 @@ function cartaoCont(l, oc, rotulo) {
     <div class="contbobs">${bs.map(b => {
       const f = FIL[b.filamento_id] || {};
       return `<span class="mini${SEL === b.id ? ' sel' : ''}" data-bob="${b.id}" title="${esc(nomeFil(f))} · ${Math.round(+b.restante_g || 0)} g">${
-        bobinaSVG(corDoFil(f), tamBob(f, 30), eTransparente(f.cor))}<i>${esc(materialBase(f))}</i></span>`;
+        desenhoSVG(corDoFil(f), tamBob(f, 30), eTransparente(f.cor), f.material, (+b.restante_g || 0) / (+b.peso_liquido_g || 1))}<i>${esc(materialBase(f))}</i></span>`;
     }).join('') || '<span class="sub">vazio — arrasta para aqui</span>'}</div>
     ${CONT_ABERTO === l.id && !rotulo ? editorRegras(l) : ''}
   </div>`;
@@ -2539,6 +2590,7 @@ function cartaoCont(l, oc, rotulo) {
 const MODELOS = [
   ['Vazio', {}], ['PLA normais', {cat: ['pla']}], ['PLA especiais', {cat: ['pla_esp']}],
   ['PETG', {cat: ['petg']}], ['Engenharia', {cat: ['eng']}],
+  ['Resinas', {cat: ['res', 'res_abs', 'res_tec']}],
   ['Pretos e brancos', {cor: ['preto', 'branco']}], ['Seladas (reserva)', {estado: ['selado']}],
 ];
 /* Os contentores de antes da última mudança que ainda não voltaram a existir.
@@ -2973,7 +3025,7 @@ function montaPickerManual() {
   const desenha = () => {
     const nome = [$('#mMat').value, $('#mCor').value].filter(Boolean).join(' ');
     const c = escolhido || corDe(nome) || NEUTRA;
-    prev.innerHTML = bobinaSVG(c, 46, eTransparente(nome))
+    prev.innerHTML = desenhoSVG(c, 46, eTransparente(nome), $("#mMat").value)
       + `<div class="sub">${escolhido ? 'cor escolhida'
           : (corDe(nome) ? 'cor lida de <b>' + esc(nome) + '</b>' : 'escreve a cor, ou escolhe uma')}
          <br>${esc(c)}</div>`;

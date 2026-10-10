@@ -30,7 +30,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from lexicon import CORES, GRUPOS, build_index, norm
+from lexicon import CORES, GRUPOS, build_index, e_resina, norm
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
@@ -174,6 +174,12 @@ def _num(s) -> float | None:
 
 PESO_RE = re.compile(
     r"(?<![\d.,])(\d+(?:[.,]\d+)?)\s*(kg|kgs|quilos?|g|gr|gramas?)(?![a-z])", re.I)
+# As resinas vendem-se muitas vezes em volume ("500ml", "1L"). Passa-se a gramas
+# pela densidade típica de uma resina de impressão, ~1,1 g/ml -- é uma conta
+# aproximada, mas é o que permite haver €/kg para comparar.
+VOLUME_RE = re.compile(
+    r"(?<![\d.,])(\d+(?:[.,]\d+)?)\s*(ml|l|lt|litros?|liters?|litres?)(?![a-z])", re.I)
+DENSIDADE_RESINA = 1.1
 
 
 def peso_g(titulo: str) -> float | None:
@@ -188,6 +194,14 @@ def peso_g(titulo: str) -> float | None:
         if n is None:
             continue
         g = n * 1000 if unidade.lower().startswith(("kg", "quilo")) else n
+        if 20 <= g <= 10000:
+            return g
+    for valor, unidade in VOLUME_RE.findall(titulo or ""):
+        n = _num(valor)
+        if n is None:
+            continue
+        ml = n if unidade.lower() == "ml" else n * 1000
+        g = round(ml * DENSIDADE_RESINA)
         if 20 <= g <= 10000:
             return g
     return None
@@ -575,7 +589,9 @@ NAO_FILAMENTO = ("resin", "resina", "printer", "impressora", "nozzle", "bico",
                  "screen", "ecra", "adhesive", "cola", "glue", "tool", "chave",
                  "tubo", "tube", "ptfe", "teflon", "conector", "connector",
                  "acoplador", "coupler", "caneta", "pen", "livro", "book",
-                 "suporte", "holder", "secador", "dryer", "desumidificador")
+                 "suporte", "holder", "secador", "dryer", "desumidificador",
+                 "vat", "fep", "tanque", "cuba")
+RESINA_PALAVRAS = ("resin", "resina")
 
 
 def _expande(token: str) -> set[str]:
@@ -664,9 +680,15 @@ def termo_selectivo(q: str) -> str:
     return max(naocor or toks, key=len)
 
 
-def e_filamento(titulo: str) -> bool:
+def e_filamento(titulo: str, aceita_resina: bool = False) -> bool:
+    """É material de impressão (e não uma impressora, um bico, uma cuba...)?
+    As resinas só contam quando se está à procura delas -- senão uma busca por
+    "ABS" enchia-se de "ABS-like Resin"."""
     t = norm(titulo)
-    if not any(re.search(r"(?<![a-z])" + re.escape(w), t) for w in NAO_FILAMENTO):
+    if not aceita_resina and e_resina(titulo):
+        return False
+    suspeitas = [w for w in NAO_FILAMENTO if not (aceita_resina and w in RESINA_PALAVRAS)]
+    if not any(re.search(r"(?<![a-z])" + re.escape(w), t) for w in suspeitas):
         return True
     # Havendo uma palavra suspeita, só se safa quem tiver PESO ou disser bobine.
     # A regra anterior aceitava qualquer título com a palavra "filamento" e por
@@ -748,7 +770,8 @@ def produto_por_url(texto: str) -> dict:
     if not prod:
         raise ValueError("não consegui ler esse produto")
     prod["relevancia"] = 1.0
-    prod["filamento"] = e_filamento(prod["titulo"])
+    # um link colado é uma escolha deliberada: se é resina, é resina que se quer
+    prod["filamento"] = e_filamento(prod["titulo"], aceita_resina=True)
     return prod
 
 
@@ -805,7 +828,7 @@ def busca(q: str, lojas: list[str] | None = None, limite: int = 12) -> dict:
 
     for p in resultados:
         p["relevancia"] = round(pontua(p["titulo"], p.get("marca", ""), q), 3)
-        p["filamento"] = e_filamento(p["titulo"])
+        p["filamento"] = e_filamento(p["titulo"], aceita_resina=e_resina(q))
     bons = [p for p in resultados if p["relevancia"] > 0 and p["filamento"]]
     # com dois termos ou mais, exigir metade evita encher a lista de produtos que
     # só casam a marca; se isso não deixar nada, mostra-se o que houver
