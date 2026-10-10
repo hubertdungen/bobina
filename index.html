@@ -862,11 +862,18 @@ function materialBase(f) {
    cartão troca sozinho para a bobine desenhada em vez de ficar com o ícone
    partido do browser. */
 const fotoURL = u => '/api/imagem?u=' + encodeURIComponent(u);
+/* As bobines de 500 g ou menos desenham-se mais pequenas: de relance vê-se o
+   que é rolo inteiro e o que é amostra. Só o desenho -- a foto é da loja. */
+const tamBob = (f, tam) => (+f.peso_g > 0 && +f.peso_g <= 500) ? Math.round(tam * 0.78) : tam;
 function media(f, tam, bs) {
   const est = estadoCaixa(bs || vivas(f));
-  const desenho = est === 'nenhuma'
-    ? bobinaSVG(corDoFil(f), tam, transpDoFil(f))
-    : caixaSVG(corDoFil(f), tam, transpDoFil(f), est === 'algumas');
+  const td = tamBob(f, tam);
+  let desenho = est === 'nenhuma'
+    ? bobinaSVG(corDoFil(f), td, transpDoFil(f))
+    : caixaSVG(corDoFil(f), td, transpDoFil(f), est === 'algumas');
+  // a caixa à volta fica do tamanho de sempre, para os cartões não desalinharem
+  if (td < tam) desenho = `<span style="display:flex;flex:none;width:${tam}px;height:${tam}px;
+    align-items:center;justify-content:center">${desenho}</span>`;
   // a escolha de aparência manda sobre o que está gravado, sem lhe mexer
   if (VER.imagem === 'desenho') return desenho;
   const preferirFoto = VER.imagem === 'foto' ? true : !f.icone;
@@ -2524,7 +2531,7 @@ function cartaoCont(l, oc, rotulo) {
     <div class="contbobs">${bs.map(b => {
       const f = FIL[b.filamento_id] || {};
       return `<span class="mini${SEL === b.id ? ' sel' : ''}" data-bob="${b.id}" title="${esc(nomeFil(f))} · ${Math.round(+b.restante_g || 0)} g">${
-        bobinaSVG(corDoFil(f), 30, eTransparente(f.cor))}<i>${esc(materialBase(f))}</i></span>`;
+        bobinaSVG(corDoFil(f), tamBob(f, 30), eTransparente(f.cor))}<i>${esc(materialBase(f))}</i></span>`;
     }).join('') || '<span class="sub">vazio — arrasta para aqui</span>'}</div>
     ${CONT_ABERTO === l.id && !rotulo ? editorRegras(l) : ''}
   </div>`;
