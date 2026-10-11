@@ -251,7 +251,8 @@ input[type=color]{width:44px;height:32px;min-height:32px;padding:2px;cursor:poin
 .arrmonte{position:sticky;top:8px;z-index:5;max-height:calc(100vh - 100px);overflow:auto;
   background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px;transition:.12s}
 .arrcab{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.arrmonte .searchbox input{font-size:14px;min-height:38px;padding:6px 10px;border-radius:10px;margin-top:8px}
+.arrmonte .searchbox{margin-top:8px}
+.arrmonte .searchbox input{font-size:14px;min-height:38px;padding:6px 40px 6px 10px;border-radius:10px}
 .arracoes{margin:8px 0}
 .arracoes:empty{display:none}
 .arrmudcard{margin-bottom:10px;background:var(--panel2);display:flex;flex-direction:column;gap:8px;padding:12px}
@@ -311,6 +312,12 @@ body.a-arrastar .cont:not(.aceita):not(.sobre):not(.novo){opacity:.5}
   color:var(--dim);background:transparent;border:1.5px dashed var(--line);min-height:118px}
 .cont.novo:hover{color:var(--accent);border-color:var(--accent)}
 .cont.novo.aberto{display:block;font-size:13px;font-weight:400}
+.cont[data-drop]{cursor:pointer}
+.detlin{display:flex;gap:10px;align-items:center;padding:8px;border:1px solid var(--line);
+  border-radius:11px;background:var(--panel2);margin-bottom:6px;cursor:pointer}
+.detlin:hover{border-color:var(--accent)}
+.detlin .mt{white-space:normal}
+.detlin .bar{margin-top:5px}
 .fantasma{position:fixed;left:0;top:0;z-index:100;pointer-events:none;opacity:.94;margin:0;
   box-shadow:0 14px 34px rgba(0,0,0,.55);border-color:var(--accent);background:var(--panel2)}
 .aarrastar{opacity:.3}
@@ -391,7 +398,6 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
       <input id="q" placeholder="ASA Azure preto…  (escreve, não é preciso Enter)"
              autocomplete="off" autocapitalize="off" spellcheck="false">
       <span class="cnt" id="qCnt"></span>
-      <button class="clr" id="qClr" hidden>✕</button>
     </div>
     <div class="chips" id="qChips"></div>
   </div>
@@ -1425,7 +1431,7 @@ function desenhaLista() {
   const fs = VER_SEM_STOCK ? todos : todos.filter(f => vivas(f).length > 0);
 
   $('#qCnt').textContent = (q || activos.length) ? String(fs.length) : '';
-  $('#qClr').hidden = !$('#q').value;
+  $('#q')._mostra?.();   // os chips mudam o texto sem evento 'input'
   const agrupada = VISTA !== 'seguido';
   $('#lista').className = agrupada ? '' : 'spools';
   $('#lista').innerHTML = VISTA === 'local' ? porLocal(fs, termos)
@@ -2449,6 +2455,69 @@ async function move(movs, msg) {
 }
 const ondeNome = id => id ? (LOC[id]?.nome || 'contentor') : 'monte';
 
+/* ---------- um contentor em detalhe ----------
+   O cartão só mostra os desenhos; aqui vê-se cada bobine por extenso. Fica
+   aberto enquanto se devolvem bobines ao monte, e clicar numa linha abre a
+   ficha do filamento. */
+function abreContentor(lid) {
+  const dlg = document.createElement('dialog');
+  dlg.className = 'largo';
+  document.body.appendChild(dlg);
+  const desenha = () => {
+    const l = LOC[lid];
+    if (!l) return dlg.close();
+    const oc = ocupacao(), {r, de} = regrasEfectivas(lid);
+    const bs = (oc.em[lid] || []).slice().sort((a, b) => {
+      const fa = FIL[a.filamento_id] || {}, fb = FIL[b.filamento_id] || {};
+      return materialBase(fa).localeCompare(materialBase(fb))
+        || nomeFil(fa).localeCompare(nomeFil(fb), 'pt') || a.id - b.id;
+    });
+    const cap = +l.capacidade || 0;
+    const resta = bs.reduce((a, b) => a + (b.estado === 'vazio' ? 0 : (+b.restante_g || 0)), 0);
+    const linhas = bs.map(b => {
+      const f = FIL[b.filamento_id] || {};
+      const peso = +b.peso_liquido_g || 0, rest = b.estado === 'vazio' ? 0 : (+b.restante_g || 0);
+      const pct = peso ? Math.max(0, Math.min(100, rest / peso * 100)) : 0;
+      const pkg = +b.preco > 0 && peso > 0 ? b.preco / peso * 1000 : null;
+      // capacidade à parte: o que interessa aqui é se a bobine cabe nas regras
+      const fora = temRegras(r) && pontua(b, {...l, capacidade: 0}, oc) < 0;
+      const meta = [`${Math.round(rest)} g de ${Math.round(peso)} g`, b.estado,
+        temCaixa(b) ? 'na caixa' : '', b.etiqueta ? esc(b.etiqueta) : '',
+        b.comprado_loja ? esc(nomeLoja(b.comprado_loja)) : '',
+        b.comprado_em ? esc(b.comprado_em) : '', pkg ? `<b>${eur(pkg)}/kg</b>` : ''].filter(Boolean);
+      return `<div class="detlin" data-detfil="${f.id}" title="abrir a ficha do filamento">
+        <span class="pecamedia">${media(f, 40, [b])}</span>
+        <div class="pecatxt"><div class="nm">${esc(nomeFil(f) || 'sem nome')}${
+          fora ? ' <span class="pill warn" title="as regras deste contentor não a aceitam">fora das regras</span>' : ''}</div>
+          <div class="mt">${meta.join(' · ')}</div>
+          <div class="bar"><i style="width:${pct.toFixed(0)}%"></i></div></div>
+        <button class="ghost" data-volta="${b.id}" title="devolver ao monte">↩ monte</button>
+      </div>`;
+    }).join('');
+    dlg.innerHTML = `<div class="dlg">
+      <div class="row" style="align-items:flex-start"><div style="flex:1;min-width:0">
+        <h2 style="margin:0">${esc(l.nome)}</h2>
+        <div class="sub">${esc(caminhoLocal(lid))}</div></div>
+        <span class="pill${cap && bs.length >= cap ? ' bad' : ''}">${bs.length}${cap ? ' / ' + cap : ''}</span></div>
+      <div class="sub" style="margin:8px 0 12px">${temRegras(r)
+        ? `Aceita: ${esc(resumoRegras(r))}${de && de.id !== lid ? ` (herdado de ${esc(de.nome)})` : ''}`
+        : 'Aceita tudo'} · ${(resta / 1000).toFixed(2).replace('.', ',')} kg por gastar</div>
+      ${linhas || '<div class="empty">Vazio.</div>'}
+      <div class="row" style="margin-top:14px;justify-content:flex-end">
+        <button class="primary" data-fecha>fechar</button></div></div>`;
+  };
+  dlg.addEventListener('click', async e => {
+    if (e.target === dlg || e.target.closest('[data-fecha]')) return dlg.close();
+    const v = e.target.closest('[data-volta]');
+    if (v) { await move([{bobine_id: +v.dataset.volta, local_id: null}], 'de volta ao monte'); return desenha(); }
+    const lin = e.target.closest('[data-detfil]');
+    if (lin) { dlg.close(); abreFilamento(+lin.dataset.detfil); }
+  });
+  dlg.addEventListener('close', () => dlg.remove());
+  desenha();
+  dlg.showModal();
+}
+
 /* ---------- o monte ---------- */
 /* o monte tal como se vê: com a pesquisa aplicada, menos na ronda. Os botões
    de "pôr no sítio" agem sobre isto, e não sobre o que está escondido. */
@@ -2775,6 +2844,9 @@ document.addEventListener('click', async e => {
   if (q('input,button,select,label')) return;
   // tocar numa bobine escolhe-a; tocar num contentor (ou no monte) põe-na lá
   if ((el = q('[data-bob]'))) { SEL = SEL === +el.dataset.bob ? 0 : +el.dataset.bob; return desenhaArrumar(); }
+  // sem nada escolhido, clicar num contentor abre-o em detalhe
+  if (!SEL && !q('.conted') && (el = q('.cont[data-drop]')) && !el.classList.contains('novo'))
+    return abreContentor(+el.dataset.drop);
   if (SEL && (el = q('[data-drop]'))) {
     const para = +el.dataset.drop || null;
     if ((INV.bobines.find(b => b.id === SEL)?.local_id || null) === para) { SEL = 0; return desenhaArrumar(); }
@@ -3166,7 +3238,6 @@ addEventListener('blur', escondeDica);
 
 /* ---- ligações ---- */
 $('#q').addEventListener('input', () => { desenhaLista(); desenhaChips(); });
-$('#qClr').onclick = () => { $('#q').value = ''; desenhaLista(); desenhaChips(); $('#q').focus(); };
 $('#qChips').addEventListener('click', e => {
   const ss = e.target.closest('[data-semstock]');
   if (ss) { VER_SEM_STOCK = !VER_SEM_STOCK; PREF.poe('semstock', VER_SEM_STOCK);
@@ -3217,6 +3288,21 @@ async function alternaImpressora(fid) {
 }
 /* a pesquisa nas lojas é na rede, por isso espera que se pare de escrever */
 $('#sq').addEventListener('input', () => { clearTimeout(sqTimer); sqTimer = setTimeout(procuraLojas, 450); });
+/* ✕ para limpar, em todas as caixas de pesquisa: aparece quando há texto, e o
+   Esc faz o mesmo. Limpar dispara um 'input', por isso cada caixa redesenha
+   pelo caminho de sempre (a lista, as lojas, o monte do Arrumar). */
+function ligaLimpar(input) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'clr'; b.textContent = '✕'; b.title = 'limpar (Esc)';
+  input.after(b);
+  const mostra = input._mostra = () => { b.hidden = !input.value; };
+  const limpa = () => { input.value = ''; input.dispatchEvent(new Event('input')); input.focus(); };
+  b.onclick = limpa;
+  input.addEventListener('input', mostra);
+  input.addEventListener('keydown', e => { if (e.key === 'Escape' && input.value) { e.stopPropagation(); limpa(); } });
+  mostra();
+}
+['#q', '#sq', '#arrQ'].forEach(s => ligaLimpar($(s)));
 $('#sqLojas').addEventListener('click', e => {
   const c = e.target.closest('[data-loja]'); if (!c) return;
   const k = c.dataset.loja;
