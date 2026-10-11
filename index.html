@@ -559,7 +559,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
           <input type="checkbox" id="verEtiqueta"> mostrar PLA · PETG · ASA</label></div>
       <div class="field"><label>Acabamentos especiais</label>
         <label class="tog" id="verEfeitosTog" style="align-self:flex-start">
-          <input type="checkbox" id="verEfeitos"> silk · galaxy · matte · glow</label></div>
+          <input type="checkbox" id="verEfeitos"> silk · galaxy · madeira · matte…</label></div>
       <div class="field"><label>Na impressora</label>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <label class="tog" id="verImpIconeTog"><input type="checkbox" id="verImpIcone"> símbolo a verde</label>
@@ -776,8 +776,13 @@ const eTransparente = txt => /transp|clear|natural|cristal|crystal|vidro|glass/.
 function efeitoTxt(txt) {
   const t = norm(txt || ''), e = new Set();
   if (/galax|space|espaco|cosm|stardust|starlight|glitter|sparkl|purpurina|brilhantes|twinkl|vertigo/.test(t)) e.add('galaxia');
-  else if (/silk|seda|sedos|satin|acetinad|shine/.test(t)) e.add('seda');
-  else if (/(?<![a-z])(matte|mate|matt|fosco)(?![a-z])/.test(t)) e.add('mate');
+  // a mesma regra de "multicor" das famílias de cor (familia() no Arrumar)
+  else if (/rainbow|arco.?iris|multi|dual|\btri\b|bicol|camale|chameleon/.test(t)) e.add('arcoiris');
+  else if (/silk|seda|sedos|satin|acetinad|shine|metallic|metalic/.test(t)) e.add('seda');
+  else if (/wood|madeira|timber|maple|oak|carvalho|birch|pine|pinho|bamboo|cork|cortica|ebony|walnut|nogueira/.test(t)) e.add('madeira');
+  else if (/marble|marmore|granit|stone|pedra/.test(t)) e.add('marmore');
+  // carbono e fibra de vidro têm o mesmo ar fosco do matte
+  else if (/(?<![a-z])(matte|mate|matt|fosco|cf|gf|carbon|carbono)(?![a-z])/.test(t)) e.add('mate');
   if (/glow|fosforesc|gitd|luminous|brilha no escuro/.test(t)) e.add('brilho');
   return e;
 }
@@ -790,6 +795,10 @@ const arcoBob = r => `M${(24 + .866 * r).toFixed(2)} ${(24 + .5 * r).toFixed(2)}
 // pontos de brilho da galaxy: [ângulo, afastamento do centro do enrolado, tamanho]
 const ESTRELAS = [[48, -2.2, .9], [84, 2, .6], [118, -.6, 1], [152, 2.4, .55],
                   [196, -2, .8], [232, 1.2, .6], [268, -2.6, .95], [306, 1.8, .6]];
+// salpicos do mármore: [ângulo, afastamento, tamanho, claro?]
+const SALPICOS = [[42, 1.5, .7, 1], [70, -2.4, .5, 0], [101, 2.6, .55, 1], [128, -.8, .8, 0],
+                  [163, -2.8, .5, 1], [190, 2.2, .65, 0], [221, -1.6, .55, 1], [254, 2.8, .7, 0],
+                  [285, -2.2, .6, 1], [318, .8, .5, 0]];
 function bobinaSVG(cor, tam, transp, efeito) {
   const c = cor || NEUTRA, linha = visivel(c);   // mesma regra que `tinta()`
   const ef = efeito || new Set();
@@ -806,6 +815,21 @@ function bobinaSVG(cor, tam, transp, efeito) {
           stroke-width="1.15" stroke-linecap="round" stroke-dasharray="0.01 1.8"
           stroke-dashoffset="${i * .6}" opacity="${escura ? '.22' : '.3'}"/>`).join('');
   }
+  if (ef.has('madeira'))        // veios: arcos finos e interrompidos ao longo do enrolado
+    extra += [[11.2, '7 2 12 3', 0], [12.7, '15 2.5 6 2', -5], [14.3, '10 3 9 2', -11],
+              [15.7, '6 2 14 2.5', -3]].map(([r, d, o]) => `<path d="${arcoBob(r)}" fill="none"
+          stroke="#3a2210" stroke-width=".6" stroke-linecap="round" stroke-dasharray="${d}"
+          stroke-dashoffset="${o}" opacity=".45"/>`).join('');
+  if (ef.has('marmore'))        // salpicos claros e escuros
+    extra += SALPICOS.map(([a, d, t, claro]) => {
+      const rad = a * Math.PI / 180, r = 13.5 + d;
+      return `<circle cx="${(24 + r * Math.cos(rad)).toFixed(2)}" cy="${(24 + r * Math.sin(rad)).toFixed(2)}"
+          r="${t}" fill="${claro ? '#fff' : '#000'}" opacity="${claro ? '.45' : '.35'}"/>`;
+    }).join('');
+  if (ef.has('arcoiris'))       // seis faixas de cor ao longo do enrolado, sobre a cor dele
+    extra += ['#ef4444', '#f59e0b', '#eab308', '#22c55e', '#3b82f6', '#a855f7'].map((h, i) =>
+      `<path d="${arcoBob(13.5)}" fill="none" stroke="${h}" stroke-width="7.5"
+          stroke-dasharray="11.8 100" stroke-dashoffset="${(-i * 11.8).toFixed(1)}" opacity=".5"/>`).join('');
   if (ef.has('galaxia'))
     extra += ESTRELAS.map(([a, d, t]) => {
       const rad = a * Math.PI / 180, r = 13.5 + d;
