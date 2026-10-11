@@ -775,7 +775,7 @@ const eTransparente = txt => /transp|clear|natural|cristal|crystal|vidro|glass/.
    "Galaxy Silk" sim); o glow soma-se a qualquer um. */
 function efeitoTxt(txt) {
   const t = norm(txt || ''), e = new Set();
-  if (/galax|space|espaco|cosm|stardust|starlight|glitter|sparkl|purpurina|brilhantes|twinkl/.test(t)) e.add('galaxia');
+  if (/galax|space|espaco|cosm|stardust|starlight|glitter|sparkl|purpurina|brilhantes|twinkl|vertigo/.test(t)) e.add('galaxia');
   else if (/silk|seda|sedos|satin|acetinad|shine/.test(t)) e.add('seda');
   else if (/(?<![a-z])(matte|mate|matt|fosco)(?![a-z])/.test(t)) e.add('mate');
   if (/glow|fosforesc|gitd|luminous|brilha no escuro/.test(t)) e.add('brilho');
@@ -2340,7 +2340,7 @@ const CATEGORIAS = [
 const NOME_CAT = Object.fromEntries(CATEGORIAS.map(([k, n]) => [k, n]));
 /* procura-se no material E na cor: "Glitter Military Green" e "Azul Galaxia"
    são PLA especiais mesmo com o material escrito só "PLA" */
-const RE_ESPECIAL = /\b(wood|madeira|silk|seda|lw|foam|leve|lightweight|aero|glitter|sparkle|marble|marmore|metal|metallic|metalico|galaxy|galaxia|glow|fosforescente|rainbow|arco.?iris|multicolou?r|dual|tri|bicolou?r|camaleao|chameleon|cf|carbon|carbono|gf|hd|ht|stone|pedra|cork|cortica)\b/;
+const RE_ESPECIAL = /\b(wood|madeira|silk|seda|lw|foam|leve|lightweight|aero|glitter|sparkle|vertigo|marble|marmore|metal|metallic|metalico|galaxy|galaxia|glow|fosforescente|rainbow|arco.?iris|multicolou?r|dual|tri|bicolou?r|camaleao|chameleon|cf|carbon|carbono|gf|hd|ht|stone|pedra|cork|cortica)\b/;
 /* O subtipo de uma resina, pela tabela do léxico (TIPOS_RESINA): o nome para
    pôr no material e a família para arrumar. A primeira que casar ganha. */
 let _tiposRes = null;
