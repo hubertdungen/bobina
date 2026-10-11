@@ -304,6 +304,9 @@ body.a-arrastar .cont:not(.aceita):not(.sobre):not(.novo){opacity:.5}
   border:1px solid transparent;border-radius:8px;cursor:grab;touch-action:pan-y;user-select:none;
   -webkit-user-select:none;-webkit-touch-callout:none}
 .mini:hover{border-color:var(--line)}
+/* caixa fixa de 30 px: uma bobine pequena desenha-se mais pequena mas fica no
+   mesmo centro, e a etiqueta por baixo não sobe */
+.minibob{display:flex;width:30px;height:30px;align-items:center;justify-content:center}
 .mini i{font-style:normal;font-size:8.5px;font-weight:800;color:var(--dim);letter-spacing:.3px;
   max-width:42px;overflow:hidden;white-space:nowrap}
 .conted{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
@@ -554,6 +557,9 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
       <div class="field"><label>Etiqueta do material</label>
         <label class="tog" id="verEtiquetaTog" style="align-self:flex-start">
           <input type="checkbox" id="verEtiqueta"> mostrar PLA · PETG · ASA</label></div>
+      <div class="field"><label>Acabamentos especiais</label>
+        <label class="tog" id="verEfeitosTog" style="align-self:flex-start">
+          <input type="checkbox" id="verEfeitos"> silk · galaxy · matte · glow</label></div>
       <div class="field"><label>Na impressora</label>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <label class="tog" id="verImpIconeTog"><input type="checkbox" id="verImpIcone"> símbolo a verde</label>
@@ -763,12 +769,56 @@ const NEUTRA = '#8892a0';
 const eTransparente = txt => /transp|clear|natural|cristal|crystal|vidro|glass/.test(norm(txt || ''));
 /* Bobine vista de frente, em traço: aro, filamento enrolado com a folga por onde
    sai a ponta, e o núcleo. Mesma linguagem do logótipo, em pequeno. */
-function bobinaSVG(cor, tam, transp) {
+/* Acabamentos especiais, lidos do material e da cor. Discretos de propósito:
+   distinguem-se de relance sem competir com a cor nem com o resto do cartão.
+   Galaxy ganha a silk, e silk a matte (um "Silk Matte" não existe, mas um
+   "Galaxy Silk" sim); o glow soma-se a qualquer um. */
+function efeitoTxt(txt) {
+  const t = norm(txt || ''), e = new Set();
+  if (/galax|space|espaco|cosm|stardust|starlight|glitter|sparkl|purpurina|brilhantes|twinkl/.test(t)) e.add('galaxia');
+  else if (/silk|seda|sedos|satin|acetinad|shine/.test(t)) e.add('seda');
+  else if (/(?<![a-z])(matte|mate|matt|fosco)(?![a-z])/.test(t)) e.add('mate');
+  if (/glow|fosforesc|gitd|luminous|brilha no escuro/.test(t)) e.add('brilho');
+  return e;
+}
+const efeitoVer = txt => VER.efeitos ? efeitoTxt(txt) : null;
+const efeitoDoFil = f => efeitoVer((f.material || '') + ' ' + (f.cor || ''));
+/* o arco do filamento enrolado, a um raio qualquer: vai dos 30° aos 330°,
+   deixando a folga por onde sai a ponta */
+const arcoBob = r => `M${(24 + .866 * r).toFixed(2)} ${(24 + .5 * r).toFixed(2)} A${r} ${r} 0 1 1 ${
+  (24 + .866 * r).toFixed(2)} ${(24 - .5 * r).toFixed(2)}`;
+// pontos de brilho da galaxy: [ângulo, afastamento do centro do enrolado, tamanho]
+const ESTRELAS = [[48, -2.2, .9], [84, 2, .6], [118, -.6, 1], [152, 2.4, .55],
+                  [196, -2, .8], [232, 1.2, .6], [268, -2.6, .95], [306, 1.8, .6]];
+function bobinaSVG(cor, tam, transp, efeito) {
   const c = cor || NEUTRA, linha = visivel(c);   // mesma regra que `tinta()`
-  return `<svg class="bob" viewBox="0 0 48 48" width="${tam}" height="${tam}" aria-hidden="true">
+  const ef = efeito || new Set();
+  let extra = '';
+  if (ef.has('seda'))           // um fio de luz ao longo do enrolado e um reflexo curto
+    extra += `<path d="${arcoBob(13.5)}" fill="none" stroke="#fff" stroke-width="1.4"
+          stroke-linecap="round" opacity=".2"/>
+      <path d="${arcoBob(13.5)}" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"
+          opacity=".55" stroke-dasharray="8 200" stroke-dashoffset="-33"/>`;
+  if (ef.has('mate')) {         // pontilhado fino: a textura de um acabamento fosco
+    // claro sobre cores escuras, escuro sobre claras -- quase todo o matte é preto
+    const escura = luz(c) < 0.18, ponto = escura ? '#fff' : '#000';
+    extra += [11, 13.5, 16].map((r, i) => `<path d="${arcoBob(r)}" fill="none" stroke="${ponto}"
+          stroke-width="1.15" stroke-linecap="round" stroke-dasharray="0.01 1.8"
+          stroke-dashoffset="${i * .6}" opacity="${escura ? '.22' : '.3'}"/>`).join('');
+  }
+  if (ef.has('galaxia'))
+    extra += ESTRELAS.map(([a, d, t]) => {
+      const rad = a * Math.PI / 180, r = 13.5 + d;
+      return `<circle cx="${(24 + r * Math.cos(rad)).toFixed(2)}" cy="${(24 + r * Math.sin(rad)).toFixed(2)}"
+          r="${t}" fill="#fff" opacity="${t > .7 ? '.9' : '.6'}"/>`;
+    }).join('');
+  // o glow vai no <svg> de fora; caixaSVG copia-o quando embrulha a bobine
+  const brilho = ef.has('brilho') ? ` style="filter:drop-shadow(0 0 2.5px ${c}aa)"` : '';
+  return `<svg class="bob" viewBox="0 0 48 48" width="${tam}" height="${tam}" aria-hidden="true"${brilho}>
     <circle cx="24" cy="24" r="20.5" fill="none" stroke="${linha}" stroke-width="1.8" opacity=".75"/>
     <path d="M35.69 30.75 A13.5 13.5 0 1 1 35.69 17.25" fill="none" stroke="${c}"
           stroke-width="7.5" stroke-linecap="round" opacity="${transp ? '.45' : '.95'}"/>
+    ${extra}
     <path d="M35.69 17.25 c 4 -1.5, 6.5 2, 3.6 4.8" fill="none" stroke="${linha}"
           stroke-width="2" stroke-linecap="round"/>
     <circle cx="24" cy="24" r="6" fill="none" stroke="${linha}" stroke-width="1.8"/>
@@ -799,15 +849,17 @@ function frascoSVG(cor, tam, transp, nivel = 1) {
   </svg>`;
 }
 /* o desenho certo para o material: frasco para resina, bobine para o resto */
-const desenhoSVG = (cor, tam, transp, material, nivel) => eResinaTxt(material)
-  ? frascoSVG(cor, tam, transp, nivel) : bobinaSVG(cor, tam, transp);
+const desenhoSVG = (cor, tam, transp, material, nivel, efeito) => eResinaTxt(material)
+  ? frascoSVG(cor, tam, transp, nivel) : bobinaSVG(cor, tam, transp, efeito);
 function caixaSVG(cor, tam, transp, tracejado, dentroSVG) {
   const linha = visivel(cor || NEUTRA);
-  const dentro = (dentroSVG || bobinaSVG(cor, tam, transp))
+  const bruto = dentroSVG || bobinaSVG(cor, tam, transp);
+  const brilho = (bruto.match(/^<svg[^>]*?( style="[^"]*")/) || [])[1] || '';
+  const dentro = bruto
     .replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
   // tracejado = umas bobines têm caixa e outras não; a moldura fica meio posta
   const traco = tracejado ? ' stroke-dasharray="5 4.5" stroke-linecap="round"' : '';
-  return `<svg class="bob" viewBox="0 0 48 48" width="${tam}" height="${tam}" aria-hidden="true">
+  return `<svg class="bob" viewBox="0 0 48 48" width="${tam}" height="${tam}" aria-hidden="true"${brilho}>
     <rect x="2.4" y="2.4" width="43.2" height="43.2" rx="9.5" fill="none"
           stroke="${linha}" stroke-width="1.7" opacity="${tracejado ? '.75' : '.6'}"${traco}/>
     <g transform="translate(24 24) scale(.72) translate(-24 -24)">${dentro}</g>
@@ -903,7 +955,8 @@ function media(f, tam, bs) {
   // só o frasco usa o nível: quanto resta de tudo o que se comprou
   const tot = bsx.reduce((a, b) => a + (+b.peso_liquido_g || 0), 0);
   const res = bsx.reduce((a, b) => a + (b.estado === 'vazio' ? 0 : (+b.restante_g || 0)), 0);
-  const dentro = desenhoSVG(corDoFil(f), td, transpDoFil(f), f.material, tot ? res / tot : 1);
+  const dentro = desenhoSVG(corDoFil(f), td, transpDoFil(f), f.material, tot ? res / tot : 1,
+                              efeitoDoFil(f));
   let desenho = est === 'nenhuma' ? dentro
     : caixaSVG(corDoFil(f), td, transpDoFil(f), est === 'algumas', dentro);
   // a caixa à volta fica do tamanho de sempre, para os cartões não desalinharem
@@ -1199,6 +1252,7 @@ const PREF = {
 let VER = {
   imagem: PREF.ler('ver.imagem', 'auto'),     // auto | desenho | foto
   etiqueta: PREF.ler('ver.etiqueta', true),   // etiqueta do material no cartão
+  efeitos: PREF.ler('ver.efeitos', true),     // silk, galaxy, matte e glow no desenho
   /* eram uma so ('ver.selado'); quem ja a tinha desligada continua sem nada */
   veu: PREF.ler('ver.veu', PREF.ler('ver.selado', true)),
   reflexo: PREF.ler('ver.reflexo', PREF.ler('ver.selado', true)),
@@ -1577,9 +1631,9 @@ async function abreFilamento(fid) {
     const usaFoto = f.imagem && !(dlg.querySelector('#fIcone') || {}).checked;
     prevDet.innerHTML = (f.imagem ? `<img class="foto" src="${esc(fotoURL(f.imagem))}" width="46" height="46"
         alt="" style="opacity:${usaFoto ? 1 : .35}">` : '')
-      + (estCx === 'nenhuma' ? desenhoSVG(c, 46, eTransparente(nome), dlg.querySelector('#fMat').value)
+      + (estCx === 'nenhuma' ? desenhoSVG(c, 46, eTransparente(nome), dlg.querySelector('#fMat').value, 1, efeitoVer(nome))
                              : caixaSVG(c, 46, eTransparente(nome), estCx === 'algumas',
-                                 desenhoSVG(c, 46, eTransparente(nome), dlg.querySelector('#fMat').value)))
+                                 desenhoSVG(c, 46, eTransparente(nome), dlg.querySelector('#fMat').value, 1, efeitoVer(nome))))
       + `<div class="sub">${hexDet ? 'cor escolhida' : (corDe(nome) ? 'cor lida do nome' : 'sem cor reconhecida')}
          <br>${esc(c)}${f.imagem ? (usaFoto ? ' · mostra a foto' : ' · mostra o desenho') : ''}</div>`;
   };
@@ -1988,7 +2042,7 @@ async function adicionaDeLoja(p) {
     const usaFoto = p.imagem && !desenhar;
     prev.innerHTML = (p.imagem ? `<img class="foto" src="${esc(p.imagem)}" width="46" height="46"
         alt="" style="opacity:${usaFoto ? 1 : .35}">` : '')
-      + desenhoSVG(c, 46, eTransparente(nome), dlg.querySelector("#xMat").value)
+      + desenhoSVG(c, 46, eTransparente(nome), dlg.querySelector("#xMat").value, 1, efeitoVer(nome))
       + `<div class="sub">${hexEscolhido ? 'cor escolhida' : (corDe(nome) ? 'cor lida de <b>' + esc(nome) + '</b>' : 'sem cor reconhecida')}
          <br>${esc(c)}${p.imagem ? (usaFoto ? ' · fica a foto da loja' : ' · fica o desenho') : ''}</div>`;
   };
@@ -2650,8 +2704,8 @@ function cartaoCont(l, oc, rotulo) {
       : (l.tipo === 'impressora' ? 'impressora — só o que lá puseres' : 'aceita tudo')}</div>
     <div class="contbobs">${bs.map(b => {
       const f = FIL[b.filamento_id] || {};
-      return `<span class="mini${SEL === b.id ? ' sel' : ''}" data-bob="${b.id}" title="${esc(nomeFil(f))} · ${Math.round(+b.restante_g || 0)} g">${
-        desenhoSVG(corDoFil(f), tamBob(f, 30), eTransparente(f.cor), f.material, (+b.restante_g || 0) / (+b.peso_liquido_g || 1))}<i>${esc(materialBase(f))}</i></span>`;
+      return `<span class="mini${SEL === b.id ? ' sel' : ''}" data-bob="${b.id}" title="${esc(nomeFil(f))} · ${Math.round(+b.restante_g || 0)} g"><span class="minibob">${
+        desenhoSVG(corDoFil(f), tamBob(f, 30), eTransparente(f.cor), f.material, (+b.restante_g || 0) / (+b.peso_liquido_g || 1), efeitoDoFil(f))}</span><i>${esc(materialBase(f))}</i></span>`;
     }).join('') || '<span class="sub">vazio — arrasta para aqui</span>'}</div>
     ${CONT_ABERTO === l.id && !rotulo ? editorRegras(l) : ''}
   </div>`;
@@ -3032,10 +3086,11 @@ async function desenhaDef() {
     tog.classList.toggle('on', !!VER[chave]);
     c.onchange = () => {
       VER[chave] = c.checked; PREF.poe('ver.' + chave, VER[chave]);
-      tog.classList.toggle('on', c.checked); desenhaLista();
+      tog.classList.toggle('on', c.checked); desenhaLista(); desenhaArrumar();
     };
   };
   ligaVer('verEtiqueta', 'etiqueta');
+  ligaVer('verEfeitos', 'efeitos');
   ligaVer('verVeu', 'veu');
   ligaVer('verReflexo', 'reflexo');
   ligaVer('verImpIcone', 'impIcone');
@@ -3097,7 +3152,7 @@ function montaPickerManual() {
   const desenha = () => {
     const nome = [$('#mMat').value, $('#mCor').value].filter(Boolean).join(' ');
     const c = escolhido || corDe(nome) || NEUTRA;
-    prev.innerHTML = desenhoSVG(c, 46, eTransparente(nome), $("#mMat").value)
+    prev.innerHTML = desenhoSVG(c, 46, eTransparente(nome), $("#mMat").value, 1, efeitoVer(nome))
       + `<div class="sub">${escolhido ? 'cor escolhida'
           : (corDe(nome) ? 'cor lida de <b>' + esc(nome) + '</b>' : 'escreve a cor, ou escolhe uma')}
          <br>${esc(c)}</div>`;
