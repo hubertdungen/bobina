@@ -6,6 +6,14 @@ quanto custa em cada loja — e um agente que ajuda a arrumar.
 Python da biblioteca padrão, **sem dependências**: corre com o `python3` do sistema.
 Serve em `:8100` e guarda tudo num SQLite em `~/.local/share/bobina/bobina.db`.
 
+## Capturas de ecrã
+
+A app real com um inventário de demonstração. Nomes, quantidades e preços são exemplos, não cotações atuais das lojas.
+
+![Inventário: pesquisa, cores das bobines, quantidades e custo](docs/screenshots/bobina-inventory.png)
+
+![Locais: capacidade, peso e valor por estante](docs/screenshots/bobina-storage.png)
+
 ## O que faz
 
 **Pesquisa instantânea.** Escreve-se e a lista filtra — sem Enter, sem botão. O
@@ -211,4 +219,4 @@ mostra são lidos das páginas públicas delas, são informativos e ficam
 desactualizados — confirma sempre no site da loja antes de comprar.
 
 
-<p align="center"><a href="https://dlforge.dungenlabs.com"><img src="docs/branding/dlforge-logo.svg" alt="DL Forge" width="120"></a><br><a href="https://dlforge.dungenlabs.com">DL Forge</a></p>
+<p align="center"><a href="https://dlforge.dungenlabs.com"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/branding/dlforge-logo-negative.svg"><source media="(prefers-color-scheme: light)" srcset="docs/branding/dlforge-logo.svg"><img src="docs/branding/dlforge-logo.svg" alt="DL Forge" width="120"></picture></a><br><a href="https://dlforge.dungenlabs.com">DL Forge</a></p>
