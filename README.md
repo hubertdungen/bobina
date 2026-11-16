@@ -209,3 +209,6 @@ e [`LICENCA.md`](LICENCA.md) (português).
 As lojas referidas não têm qualquer ligação a este projeto. Os preços que a app
 mostra são lidos das páginas públicas delas, são informativos e ficam
 desactualizados — confirma sempre no site da loja antes de comprar.
+
+
+<p align="center"><a href="https://dlforge.dungenlabs.com"><img src="docs/branding/dlforge-logo.svg" alt="DL Forge" width="120"></a><br><a href="https://dlforge.dungenlabs.com">DL Forge</a></p>
