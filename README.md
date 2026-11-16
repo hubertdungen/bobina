@@ -1,5 +1,7 @@
 # Bobina — logística de filamento 3D
 
+[English](docs/README.en.md)
+
 Inventário de filamento para impressão 3D: o que tenho, onde está, quanto resta,
 quanto custa em cada loja — e um agente que ajuda a arrumar.
 
