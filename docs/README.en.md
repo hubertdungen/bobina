@@ -91,4 +91,4 @@ Source-available, not open source. **Free for personal use; commercial use needs
 
 The shops mentioned have no connection with this project. The prices the app shows are read from their public pages, are informational and go stale — always confirm on the shop's site before buying.
 
-<p align="center"><a href="https://dlforge.dungenlabs.com"><img src="branding/dlforge-logo.svg#gh-light-mode-only" alt="DL Forge" width="120"><img src="branding/dlforge-logo-negative.svg#gh-dark-mode-only" alt="DL Forge" width="120"></a></p>
+<p align="center"><a href="https://dlforge.dungenlabs.com"><picture><source media="(prefers-color-scheme: dark)" srcset="branding/dlforge-logo-negative.svg"><img src="branding/dlforge-logo.svg" alt="DL Forge" width="120"></picture></a></p>
